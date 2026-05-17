@@ -60,6 +60,10 @@ else
   echo "  (raspi-config not found — disable blanking manually if needed)"
 fi
 
+# 4. Install Noto Color Emoji so Chromium renders emoji glyphs in quick replies
+echo "▸ Installing Noto Color Emoji font"
+sudo apt install -y fonts-noto-color-emoji || true
+
 echo
 echo "✓ Installed."
 echo "  • Server status : sudo systemctl status crema"

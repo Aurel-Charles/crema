@@ -108,37 +108,44 @@
       font-weight: 400;
     }
 
-    #reply-bar {
-      position: absolute;
-      bottom: 28px;
-      right: 28px;
+    .reply-bar {
+      margin-top: 36px;
       display: flex;
-      gap: 10px;
+      gap: 12px;
       flex-wrap: wrap;
-      justify-content: flex-end;
-      max-width: 70vw;
+      justify-content: center;
     }
-    #reply-bar.hidden { display: none; }
 
     .reply-btn {
       min-height: 56px;
       min-width: 56px;
-      padding: 12px 22px;
+      padding: 12px 24px;
       font-family: inherit;
       font-size: clamp(18px, 2vw, 22px);
       font-weight: 500;
-      color: var(--text);
-      background: transparent;
-      border: 1.5px solid var(--muted);
+      color: var(--accent);
+      background: rgba(244, 166, 90, 0.1);
+      border: 1.5px solid rgba(244, 166, 90, 0.4);
       border-radius: 999px;
       cursor: pointer;
-      transition: background 0.15s ease, transform 0.05s ease, border-color 0.15s ease;
+      transition: background 0.15s ease, transform 0.05s ease, border-color 0.15s ease, color 0.15s ease;
       -webkit-tap-highlight-color: transparent;
     }
-    .reply-btn:active { transform: scale(0.96); background: rgba(244, 166, 90, 0.15); }
-    .reply-btn:disabled { opacity: 0.4; cursor: default; }
-    .reply-btn.sent { border-color: var(--presence); color: var(--presence); }
-    .reply-btn.failed { border-color: #c45a45; color: #c45a45; }
+    .reply-btn:active {
+      transform: scale(0.96);
+      background: rgba(244, 166, 90, 0.22);
+    }
+    .reply-btn:disabled { opacity: 0.5; cursor: default; }
+    .reply-btn.sent {
+      background: rgba(135, 196, 89, 0.15);
+      border-color: var(--presence);
+      color: var(--presence);
+    }
+    .reply-btn.failed {
+      background: rgba(196, 90, 69, 0.15);
+      border-color: #c45a45;
+      color: #c45a45;
+    }
   </style>
 </head>
 <body class="night">
@@ -148,13 +155,10 @@
 
   <main id="screen"></main>
 
-  <div id="reply-bar" class="hidden"></div>
-
   <script src="/socket.io/socket.io.js"></script>
   <script>
     // ===== State =====
     const screen = document.getElementById('screen');
-    const replyBar = document.getElementById('reply-bar');
     const presenceList = document.getElementById('presence-list');
 
     const MESSAGE_TTL_MS = 30_000;
@@ -169,7 +173,7 @@
 
     let mode = 'idle';
     let resetTimer = null;
-    let currentMsg = null;     // { fromInstanceId, isReply } while displaying a message
+    let currentMsg = null;     // full message data while displaying a message
     let replies = [];          // configured quick replies
     const peers = new Map();   // instanceId -> owner
 
@@ -186,35 +190,35 @@
     function showIdle() {
       mode = 'idle';
       currentMsg = null;
-      hideReplyBar();
       renderIdle();
     }
 
-    function showMessage({ text, from, fromInstanceId, isReply }) {
+    function showMessage(data) {
       mode = 'message';
-      currentMsg = { fromInstanceId, isReply };
-      const fromLabel = from ? `<div class="from">${escapeHtml(from)}</div>` : '';
-      const prefix = isReply ? '<span class="reply-prefix">↩</span>' : '';
-      screen.className = 'msg';
-      screen.innerHTML = `${fromLabel}<div class="text">${prefix}${escapeHtml(text)}</div>`;
-      renderReplyBar();
+      currentMsg = data;
+      renderMessage();
       if (resetTimer) clearTimeout(resetTimer);
       resetTimer = setTimeout(showIdle, MESSAGE_TTL_MS);
     }
 
-    function renderReplyBar() {
-      const canReply = currentMsg && !currentMsg.isReply && currentMsg.fromInstanceId
-                       && replies.length > 0;
-      if (!canReply) { hideReplyBar(); return; }
-      replyBar.classList.remove('hidden');
-      replyBar.innerHTML = replies
-        .map((r, i) => `<button class="reply-btn" data-i="${i}">${escapeHtml(r.label)}</button>`)
-        .join('');
+    function renderMessage() {
+      if (!currentMsg) return;
+      const { text, from, isReply } = currentMsg;
+      const fromLabel = from ? `<div class="from">${escapeHtml(from)}</div>` : '';
+      const prefix = isReply ? '<span class="reply-prefix">↩</span>' : '';
+      screen.className = 'msg';
+      screen.innerHTML = `${fromLabel}<div class="text">${prefix}${escapeHtml(text)}</div>${replyBarHtml()}`;
     }
 
-    function hideReplyBar() {
-      replyBar.classList.add('hidden');
-      replyBar.innerHTML = '';
+    function replyBarHtml() {
+      if (!currentMsg) return '';
+      const { fromInstanceId, isReply } = currentMsg;
+      const canReply = !isReply && fromInstanceId && replies.length > 0;
+      if (!canReply) return '';
+      const buttons = replies
+        .map((r, i) => `<button class="reply-btn" data-i="${i}">${escapeHtml(r.label)}</button>`)
+        .join('');
+      return `<div class="reply-bar">${buttons}</div>`;
     }
 
     function renderPresence() {
@@ -241,15 +245,15 @@
     }
 
     // ===== Reply handling =====
-    replyBar.addEventListener('click', async (e) => {
+    screen.addEventListener('click', async (e) => {
       const btn = e.target.closest('.reply-btn');
       if (!btn || btn.disabled || !currentMsg?.fromInstanceId) return;
       const idx = Number(btn.dataset.i);
       const reply = replies[idx];
       if (!reply) return;
 
-      // Disable all buttons during the send
-      for (const b of replyBar.querySelectorAll('.reply-btn')) b.disabled = true;
+      const allBtns = screen.querySelectorAll('.reply-btn');
+      for (const b of allBtns) b.disabled = true;
 
       try {
         const r = await fetch('/reply', {
@@ -260,15 +264,13 @@
         if (!r.ok) throw new Error('send failed');
         btn.classList.add('sent');
         btn.textContent = '✓ ' + reply.label;
-        // Short delay so the user sees the confirmation, then back to idle
         if (resetTimer) clearTimeout(resetTimer);
         resetTimer = setTimeout(showIdle, REPLY_RETURN_DELAY_MS);
       } catch {
         btn.classList.add('failed');
         btn.textContent = '✕ ' + reply.label;
-        // Re-enable buttons after a moment so user can retry
         setTimeout(() => {
-          for (const b of replyBar.querySelectorAll('.reply-btn')) b.disabled = false;
+          for (const b of allBtns) b.disabled = false;
           btn.classList.remove('failed');
           btn.textContent = reply.label;
         }, 2000);
@@ -324,7 +326,7 @@
       try {
         const r = await fetch('/replies');
         replies = await r.json();
-        if (mode === 'message') renderReplyBar();
+        if (mode === 'message') renderMessage();
       } catch {}
     }
     loadReplies();
@@ -348,7 +350,7 @@
 
     socket.on('replies:updated', (list) => {
       replies = list;
-      if (mode === 'message') renderReplyBar();
+      if (mode === 'message') renderMessage();
     });
 
     socket.on('message', (data) => {
