@@ -102,6 +102,43 @@
       font-weight: 500;
       color: var(--text);
     }
+    .msg .text .reply-prefix {
+      color: var(--muted);
+      margin-right: 0.4em;
+      font-weight: 400;
+    }
+
+    #reply-bar {
+      position: absolute;
+      bottom: 28px;
+      right: 28px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: 70vw;
+    }
+    #reply-bar.hidden { display: none; }
+
+    .reply-btn {
+      min-height: 56px;
+      min-width: 56px;
+      padding: 12px 22px;
+      font-family: inherit;
+      font-size: clamp(18px, 2vw, 22px);
+      font-weight: 500;
+      color: var(--text);
+      background: transparent;
+      border: 1.5px solid var(--muted);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.05s ease, border-color 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .reply-btn:active { transform: scale(0.96); background: rgba(244, 166, 90, 0.15); }
+    .reply-btn:disabled { opacity: 0.4; cursor: default; }
+    .reply-btn.sent { border-color: var(--presence); color: var(--presence); }
+    .reply-btn.failed { border-color: #c45a45; color: #c45a45; }
   </style>
 </head>
 <body class="night">
@@ -111,11 +148,18 @@
 
   <main id="screen"></main>
 
+  <div id="reply-bar" class="hidden"></div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // ===== Clock + date =====
+    // ===== State =====
     const screen = document.getElementById('screen');
+    const replyBar = document.getElementById('reply-bar');
+    const presenceList = document.getElementById('presence-list');
+
     const MESSAGE_TTL_MS = 30_000;
+    const REPLY_RETURN_DELAY_MS = 1_500;
+
     const dateFmt = new Intl.DateTimeFormat('fr-FR', {
       weekday: 'long', day: 'numeric', month: 'long',
     });
@@ -123,9 +167,13 @@
       hour: '2-digit', minute: '2-digit', hour12: false,
     });
 
-    let resetTimer = null;
     let mode = 'idle';
+    let resetTimer = null;
+    let currentMsg = null;     // { fromInstanceId, isReply } while displaying a message
+    let replies = [];          // configured quick replies
+    const peers = new Map();   // instanceId -> owner
 
+    // ===== Render =====
     function renderIdle() {
       const now = new Date();
       screen.className = 'idle';
@@ -135,22 +183,55 @@
       `;
     }
 
-    function tick() {
-      if (mode === 'idle') renderIdle();
-    }
-
     function showIdle() {
       mode = 'idle';
+      currentMsg = null;
+      hideReplyBar();
       renderIdle();
     }
 
-    function showMessage({ text, from }) {
+    function showMessage({ text, from, fromInstanceId, isReply }) {
       mode = 'message';
+      currentMsg = { fromInstanceId, isReply };
       const fromLabel = from ? `<div class="from">${escapeHtml(from)}</div>` : '';
+      const prefix = isReply ? '<span class="reply-prefix">↩</span>' : '';
       screen.className = 'msg';
-      screen.innerHTML = `${fromLabel}<div class="text">${escapeHtml(text)}</div>`;
+      screen.innerHTML = `${fromLabel}<div class="text">${prefix}${escapeHtml(text)}</div>`;
+      renderReplyBar();
       if (resetTimer) clearTimeout(resetTimer);
       resetTimer = setTimeout(showIdle, MESSAGE_TTL_MS);
+    }
+
+    function renderReplyBar() {
+      const canReply = currentMsg && !currentMsg.isReply && currentMsg.fromInstanceId
+                       && replies.length > 0;
+      if (!canReply) { hideReplyBar(); return; }
+      replyBar.classList.remove('hidden');
+      replyBar.innerHTML = replies
+        .map((r, i) => `<button class="reply-btn" data-i="${i}">${escapeHtml(r.label)}</button>`)
+        .join('');
+    }
+
+    function hideReplyBar() {
+      replyBar.classList.add('hidden');
+      replyBar.innerHTML = '';
+    }
+
+    function renderPresence() {
+      if (peers.size === 0) { presenceList.innerHTML = ''; return; }
+      const seenOwners = new Set();
+      const rows = [];
+      for (const owner of peers.values()) {
+        if (seenOwners.has(owner)) continue;
+        seenOwners.add(owner);
+        rows.push(`
+          <div class="presence">
+            <span class="dot"></span>
+            <span><span class="name">${escapeHtml(owner)}</span> en ligne</span>
+          </div>
+        `);
+      }
+      presenceList.innerHTML = rows.join('');
     }
 
     function escapeHtml(s) {
@@ -159,12 +240,47 @@
       }[c]));
     }
 
-    // Align the next tick on the start of the next minute, then every minute.
+    // ===== Reply handling =====
+    replyBar.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.reply-btn');
+      if (!btn || btn.disabled || !currentMsg?.fromInstanceId) return;
+      const idx = Number(btn.dataset.i);
+      const reply = replies[idx];
+      if (!reply) return;
+
+      // Disable all buttons during the send
+      for (const b of replyBar.querySelectorAll('.reply-btn')) b.disabled = true;
+
+      try {
+        const r = await fetch('/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: currentMsg.fromInstanceId, label: reply.label }),
+        });
+        if (!r.ok) throw new Error('send failed');
+        btn.classList.add('sent');
+        btn.textContent = '✓ ' + reply.label;
+        // Short delay so the user sees the confirmation, then back to idle
+        if (resetTimer) clearTimeout(resetTimer);
+        resetTimer = setTimeout(showIdle, REPLY_RETURN_DELAY_MS);
+      } catch {
+        btn.classList.add('failed');
+        btn.textContent = '✕ ' + reply.label;
+        // Re-enable buttons after a moment so user can retry
+        setTimeout(() => {
+          for (const b of replyBar.querySelectorAll('.reply-btn')) b.disabled = false;
+          btn.classList.remove('failed');
+          btn.textContent = reply.label;
+        }, 2000);
+      }
+    });
+
+    // ===== Clock tick =====
     showIdle();
     const msToNextMinute = 60_000 - (Date.now() % 60_000);
     setTimeout(() => {
-      tick();
-      setInterval(tick, 60_000);
+      if (mode === 'idle') renderIdle();
+      setInterval(() => { if (mode === 'idle') renderIdle(); }, 60_000);
     }, msToNextMinute);
 
     // ===== Day/night theme =====
@@ -203,24 +319,15 @@
     setInterval(applyTheme, 60_000);
     scheduleMidnightRefresh();
 
-    // ===== Presence =====
-    const presenceList = document.getElementById('presence-list');
-    const peers = new Map(); // instanceId -> owner
-
-    function renderPresence() {
-      if (peers.size === 0) {
-        presenceList.innerHTML = '';
-        return;
-      }
-      presenceList.innerHTML = [...peers.values()]
-        .map((owner) => `
-          <div class="presence">
-            <span class="dot"></span>
-            <span><span class="name">${escapeHtml(owner)}</span> en ligne</span>
-          </div>
-        `)
-        .join('');
+    // ===== Replies fetch =====
+    async function loadReplies() {
+      try {
+        const r = await fetch('/replies');
+        replies = await r.json();
+        if (mode === 'message') renderReplyBar();
+      } catch {}
     }
+    loadReplies();
 
     // ===== Socket =====
     const socket = io();
@@ -239,9 +346,14 @@
       renderPresence();
     });
 
+    socket.on('replies:updated', (list) => {
+      replies = list;
+      if (mode === 'message') renderReplyBar();
+    });
+
     socket.on('message', (data) => {
       if (data && typeof data.text === 'string' && data.text.trim()) {
-        showMessage({ text: data.text, from: data.from });
+        showMessage(data);
       }
     });
   </script>

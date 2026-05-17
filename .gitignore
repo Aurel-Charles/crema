@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Claude Code local settings (per-machine)
 .claude/settings.local.json
+
+# Per-Pi runtime data (replies config, future SQLite, etc.)
+data/

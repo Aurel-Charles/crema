@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Crema" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <title>Crema — Réponses rapides</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f7f7f8;
+      color: #1a1410;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    header {
+      padding: 24px 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .back {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: #1a1410;
+      text-decoration: none;
+      border-radius: 12px;
+      transition: background 0.15s;
+    }
+    .back:active { background: #ebebef; }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    form {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 14px;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: #6b6b70;
+      margin-bottom: 4px;
+    }
+
+    .rows { display: flex; flex-direction: column; gap: 10px; }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .row input {
+      flex: 1;
+      font-size: 17px;
+      font-family: inherit;
+      padding: 14px 16px;
+      border: 1px solid #e2e2e6;
+      border-radius: 14px;
+      background: #fff;
+      color: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .row input:focus {
+      border-color: #f4a65a;
+      box-shadow: 0 0 0 3px rgba(244, 166, 90, 0.2);
+    }
+    .row .del {
+      width: 44px;
+      height: 44px;
+      font-size: 20px;
+      color: #6b6b70;
+      background: #fff;
+      border: 1px solid #e2e2e6;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .row .del:active { background: #fce8e6; color: #b3261e; border-color: #b3261e; }
+
+    .add {
+      align-self: flex-start;
+      padding: 10px 16px;
+      font-size: 15px;
+      font-family: inherit;
+      color: #1a1410;
+      background: transparent;
+      border: 1px dashed #b8b8bd;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .add:active { background: #ebebef; }
+    .add:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .save {
+      padding: 16px;
+      font-size: 17px;
+      font-weight: 600;
+      font-family: inherit;
+      color: #fff;
+      background: #1a1410;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.05s;
+      margin-top: auto;
+    }
+    .save:active { transform: scale(0.98); }
+    .save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .status {
+      min-height: 20px;
+      font-size: 14px;
+      text-align: center;
+      color: #6b6b70;
+    }
+    .status.ok { color: #2d7a3a; }
+    .status.err { color: #b3261e; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/" class="back" aria-label="Retour">←</a>
+    <h1>Réponses rapides</h1>
+  </header>
+
+  <form id="form">
+    <p class="hint">Boutons proposés sur le Pi quand tu reçois un message. Max 5.</p>
+    <div class="rows" id="rows"></div>
+    <button type="button" class="add" id="add">+ Ajouter</button>
+    <div class="status" id="status"></div>
+    <button type="submit" class="save" id="save">Enregistrer</button>
+  </form>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    }
+
+    const MAX = 5;
+    const rowsEl = document.getElementById('rows');
+    const addBtn = document.getElementById('add');
+    const status = document.getElementById('status');
+    const form = document.getElementById('form');
+
+    function rowTemplate(value = '') {
+      const div = document.createElement('div');
+      div.className = 'row';
+      div.innerHTML = `
+        <input type="text" maxlength="30" placeholder="Ex: 👍" />
+        <button type="button" class="del" aria-label="Supprimer">×</button>
+      `;
+      div.querySelector('input').value = value;
+      div.querySelector('.del').addEventListener('click', () => {
+        div.remove();
+        updateAddState();
+      });
+      return div;
+    }
+
+    function updateAddState() {
+      addBtn.disabled = rowsEl.children.length >= MAX;
+    }
+
+    function render(list) {
+      rowsEl.innerHTML = '';
+      for (const r of list) rowsEl.appendChild(rowTemplate(r.label));
+      if (list.length === 0) rowsEl.appendChild(rowTemplate());
+      updateAddState();
+    }
+
+    addBtn.addEventListener('click', () => {
+      if (rowsEl.children.length >= MAX) return;
+      const row = rowTemplate();
+      rowsEl.appendChild(row);
+      row.querySelector('input').focus();
+      updateAddState();
+    });
+
+    async function load() {
+      try {
+        const r = await fetch('/replies');
+        const list = await r.json();
+        render(list);
+      } catch {
+        status.textContent = 'Impossible de charger';
+        status.className = 'status err';
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = [...rowsEl.querySelectorAll('input')]
+        .map((i) => ({ label: i.value.trim() }))
+        .filter((r) => r.label);
+
+      status.textContent = 'Enregistrement…';
+      status.className = 'status';
+
+      try {
+        const r = await fetch('/replies', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Erreur');
+        render(data);
+        status.textContent = 'Enregistré';
+        status.className = 'status ok';
+        setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2000);
+      } catch (err) {
+        status.textContent = err.message || 'Erreur';
+        status.className = 'status err';
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

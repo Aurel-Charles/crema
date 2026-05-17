@@ -1,7 +1,7 @@
 {
   "name": "crema",
-  "version": "0.2.0",
-  "description": "Pi messenger — V2 idle clock, day/night theme, peer presence",
+  "version": "0.3.0",
+  "description": "Pi messenger — V3 quick replies on incoming messages",
   "type": "module",
   "main": "server.js",
   "scripts": {

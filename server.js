@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { hostname } from 'os';
 import { randomUUID } from 'crypto';
+import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +22,12 @@ const SERVICE_NAME = `crema-${OWNER}-${INSTANCE_ID.slice(0, 8)}`;
 // Override via env if Crema gets deployed elsewhere.
 const LAT = Number(process.env.CREMA_LAT ?? 49.8941);
 const LON = Number(process.env.CREMA_LON ?? 2.2958);
+
+const DATA_DIR = join(__dirname, 'data');
+const REPLIES_FILE = join(DATA_DIR, 'replies.json');
+const MAX_REPLIES = 5;
+const MAX_LABEL_LENGTH = 30;
+const DEFAULT_REPLIES = [{ label: '👍' }, { label: 'Vu' }, { label: 'Plus tard' }];
 
 function deriveOwnerFromHostname() {
   const h = hostname().replace(/\.local$/, '');
@@ -43,6 +50,10 @@ app.get('/display', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'display.html'));
 });
 
+app.get('/settings', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'settings.html'));
+});
+
 app.get('/me', (req, res) => {
   res.json({ owner: OWNER, instanceId: INSTANCE_ID });
 });
@@ -60,6 +71,98 @@ app.get('/theme-schedule', (req, res) => {
     sunset: today.sunset.toISOString(),
     nextSunrise: tomorrow.sunrise.toISOString(),
   });
+});
+
+// ===== Quick replies (V3) =====
+
+let replies = [];
+
+function sanitizeReplies(input) {
+  if (!Array.isArray(input)) throw new Error('Liste invalide');
+  const cleaned = [];
+  const seen = new Set();
+  for (const item of input) {
+    const label = typeof item?.label === 'string' ? item.label.trim() : '';
+    if (!label) continue;
+    if (label.length > MAX_LABEL_LENGTH) continue;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    cleaned.push({ label });
+    if (cleaned.length >= MAX_REPLIES) break;
+  }
+  return cleaned;
+}
+
+async function loadReplies() {
+  try {
+    const raw = await readFile(REPLIES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    replies = sanitizeReplies(parsed);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      replies = [...DEFAULT_REPLIES];
+      await persistReplies();
+      console.log('[replies] seeded defaults');
+    } else {
+      console.error('[replies] load failed:', err.message);
+      replies = [...DEFAULT_REPLIES];
+    }
+  }
+}
+
+async function persistReplies() {
+  await mkdir(DATA_DIR, { recursive: true });
+  const tmp = `${REPLIES_FILE}.tmp`;
+  await writeFile(tmp, JSON.stringify(replies, null, 2), 'utf8');
+  await rename(tmp, REPLIES_FILE);
+}
+
+app.get('/replies', (req, res) => {
+  res.json(replies);
+});
+
+app.put('/replies', async (req, res) => {
+  try {
+    replies = sanitizeReplies(req.body);
+    await persistReplies();
+    io.emit('replies:updated', replies);
+    res.json(replies);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/reply', async (req, res) => {
+  const to = typeof req.body?.to === 'string' ? req.body.to : '';
+  const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
+  if (!to) return res.status(400).json({ error: 'Destinataire manquant' });
+  if (!label) return res.status(400).json({ error: 'Réponse vide' });
+
+  const peer = findPeerByInstanceId(to);
+  if (!peer) return res.status(404).json({ error: 'Destinataire introuvable' });
+
+  const payload = {
+    text: label,
+    from: OWNER,
+    fromInstanceId: INSTANCE_ID,
+    isReply: true,
+  };
+
+  try {
+    await postInbox(peer.address, peer.port, payload);
+    return res.json({ ok: true });
+  } catch (err1) {
+    console.warn(`[reply] retry → ${peer.owner} (${err1.message})`);
+    try {
+      const fresh = await resolveHost(peer.host);
+      peer.address = fresh;
+      await postInbox(fresh, peer.port, payload);
+      return res.json({ ok: true });
+    } catch (err2) {
+      console.error(`[reply] failed → ${peer.owner}:`, err2.message);
+      return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
+    }
+  }
 });
 
 async function postInbox(address, port, payload) {
@@ -81,7 +184,7 @@ app.post('/send', async (req, res) => {
   const peer = findPeerByInstanceId(target);
   if (!peer) return res.status(404).json({ error: 'Destinataire introuvable' });
 
-  const payload = { text, from: OWNER };
+  const payload = { text, from: OWNER, fromInstanceId: INSTANCE_ID };
 
   try {
     await postInbox(peer.address, peer.port, payload);
@@ -103,8 +206,10 @@ app.post('/send', async (req, res) => {
 app.post('/inbox', (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const from = typeof req.body?.from === 'string' ? req.body.from.trim() : 'Inconnu';
+  const fromInstanceId = typeof req.body?.fromInstanceId === 'string' ? req.body.fromInstanceId : null;
+  const isReply = req.body?.isReply === true;
   if (!text) return res.status(400).json({ error: 'Message vide' });
-  io.emit('message', { text, from });
+  io.emit('message', { text, from, fromInstanceId, isReply });
   res.json({ ok: true });
 });
 
@@ -204,8 +309,10 @@ browser.on('serviceDown', (service) => {
 browser.on('error', (err) => console.error('[mDNS browse]', err.message));
 browser.start();
 
+await loadReplies();
+
 httpServer.listen(PORT, () => {
-  console.log(`Crema V2 — ${OWNER} on http://localhost:${PORT}`);
+  console.log(`Crema V3 — ${OWNER} on http://localhost:${PORT}`);
 });
 
 function shutdown() {
