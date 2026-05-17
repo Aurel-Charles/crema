@@ -11,27 +11,38 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #1a1410;
       color: #f2e4cc;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       min-height: 100vh;
       padding: 32px;
       overflow: hidden;
       cursor: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+
     #screen {
       max-width: 90vw;
       text-align: center;
       line-height: 1.2;
-      transition: opacity 0.3s ease;
     }
-    #screen.idle {
+
+    #screen .idle-text {
       font-size: clamp(72px, 18vw, 180px);
       font-weight: 300;
       color: #f4a65a;
       letter-spacing: -0.02em;
     }
-    #screen.message {
+
+    #screen .from {
+      font-size: clamp(14px, 1.6vw, 20px);
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #9c7e54;
+      margin-bottom: 24px;
+    }
+
+    #screen .message {
       font-size: clamp(38px, 6vw, 64px);
       font-weight: 500;
       color: #f2e4cc;
@@ -39,31 +50,35 @@
   </style>
 </head>
 <body>
-  <div id="screen" class="idle">Prêt</div>
+  <div id="screen"><span class="idle-text">Prêt</span></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const screen = document.getElementById('screen');
-    const IDLE_TEXT = 'Prêt';
     const MESSAGE_TTL_MS = 30_000;
     let resetTimer = null;
 
     function showIdle() {
-      screen.className = 'idle';
-      screen.textContent = IDLE_TEXT;
+      screen.innerHTML = '<span class="idle-text">Prêt</span>';
     }
 
-    function showMessage(text) {
-      screen.className = 'message';
-      screen.textContent = text;
+    function showMessage({ text, from }) {
+      const fromLabel = from ? `<div class="from">${escapeHtml(from)}</div>` : '';
+      screen.innerHTML = `${fromLabel}<div class="message">${escapeHtml(text)}</div>`;
       if (resetTimer) clearTimeout(resetTimer);
       resetTimer = setTimeout(showIdle, MESSAGE_TTL_MS);
     }
 
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
     const socket = io();
-    socket.on('message', ({ text }) => {
-      if (typeof text === 'string' && text.trim()) {
-        showMessage(text);
+    socket.on('message', (data) => {
+      if (data && typeof data.text === 'string' && data.text.trim()) {
+        showMessage({ text: data.text, from: data.from });
       }
     });
   </script>

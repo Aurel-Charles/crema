@@ -1,13 +1,14 @@
 {
   "name": "crema",
-  "version": "0.0.1",
-  "description": "Pi messenger — V0 mono-Pi",
+  "version": "0.1.0",
+  "description": "Pi messenger — V1 multi-Pi with mDNS discovery",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "bonjour-service": "^1.2.1",
     "express": "^4.21.2",
     "socket.io": "^4.8.1"
   }

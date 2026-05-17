@@ -18,7 +18,12 @@
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
     header {
-      padding: 24px 20px 8px;
+      padding: 24px 20px 0;
+    }
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
     }
     h1 {
       margin: 0;
@@ -26,24 +31,36 @@
       font-weight: 600;
       letter-spacing: -0.02em;
     }
-    p.subtitle {
-      margin: 4px 0 0;
+    .me {
+      font-size: 13px;
       color: #6b6b70;
-      font-size: 14px;
     }
+    .me strong { color: #1a1410; font-weight: 600; }
+
     form {
       flex: 1;
       display: flex;
       flex-direction: column;
-      padding: 24px 20px;
-      gap: 16px;
+      padding: 20px;
+      gap: 14px;
     }
-    textarea {
-      flex: 1;
-      min-height: 140px;
-      resize: none;
-      padding: 16px;
-      font-size: 18px;
+
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #6b6b70;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    select, textarea {
+      font-size: 17px;
       font-family: inherit;
       border: 1px solid #e2e2e6;
       border-radius: 14px;
@@ -52,10 +69,27 @@
       outline: none;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
-    textarea:focus {
+    select {
+      padding: 14px 16px;
+      appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%236b6b70' d='M6 8L2 4h8z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
+      padding-right: 40px;
+    }
+    textarea {
+      flex: 1;
+      min-height: 140px;
+      resize: none;
+      padding: 16px;
+      font-size: 18px;
+    }
+    select:focus, textarea:focus {
       border-color: #f4a65a;
       box-shadow: 0 0 0 3px rgba(244, 166, 90, 0.2);
     }
+    select:disabled, textarea:disabled { opacity: 0.5; }
+
     button {
       padding: 16px;
       font-size: 17px;
@@ -69,7 +103,8 @@
       transition: opacity 0.15s, transform 0.05s;
     }
     button:active { transform: scale(0.98); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
     .status {
       min-height: 20px;
       font-size: 14px;
@@ -78,29 +113,88 @@
     }
     .status.ok { color: #2d7a3a; }
     .status.err { color: #b3261e; }
+
+    .hint {
+      font-size: 13px;
+      color: #6b6b70;
+      text-align: center;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>Crema</h1>
-    <p class="subtitle">Envoyer un message sur l'écran</p>
+    <div class="brand">
+      <h1>Crema</h1>
+      <span class="me" id="me-label"></span>
+    </div>
   </header>
+
   <form id="form">
-    <textarea id="text" placeholder="Ton message…" autocomplete="off" required></textarea>
+    <div class="field">
+      <label for="target">Destinataire</label>
+      <select id="target" required>
+        <option value="">Recherche…</option>
+      </select>
+    </div>
+
+    <div class="field" style="flex: 1;">
+      <label for="text">Message</label>
+      <textarea id="text" placeholder="Ton message…" autocomplete="off" required></textarea>
+    </div>
+
     <div class="status" id="status"></div>
-    <button type="submit" id="send">Envoyer</button>
+    <button type="submit" id="send" disabled>Envoyer</button>
   </form>
 
   <script>
-    const form = document.getElementById('form');
+    const meLabel = document.getElementById('me-label');
+    const targetSel = document.getElementById('target');
     const textEl = document.getElementById('text');
     const btn = document.getElementById('send');
     const status = document.getElementById('status');
 
+    async function loadMe() {
+      try {
+        const r = await fetch('/me');
+        const { owner } = await r.json();
+        meLabel.innerHTML = `depuis <strong>${owner}</strong>`;
+      } catch {
+        meLabel.textContent = '';
+      }
+    }
+
+    async function loadPeers() {
+      try {
+        const r = await fetch('/peers');
+        const peers = await r.json();
+        const prev = targetSel.value;
+        if (peers.length === 0) {
+          targetSel.innerHTML = '<option value="">Aucun destinataire</option>';
+          btn.disabled = true;
+        } else {
+          targetSel.innerHTML = peers
+            .map((p) => `<option value="${p.instanceId}">${p.owner}</option>`)
+            .join('');
+          if (peers.find((p) => p.instanceId === prev)) targetSel.value = prev;
+          btn.disabled = false;
+        }
+      } catch {
+        targetSel.innerHTML = '<option value="">Erreur réseau</option>';
+        btn.disabled = true;
+      }
+    }
+
+    loadMe();
+    loadPeers();
+    setInterval(loadPeers, 5000);
+
+    const form = document.getElementById('form');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const text = textEl.value.trim();
-      if (!text) return;
+      const target = targetSel.value;
+      if (!text || !target) return;
 
       btn.disabled = true;
       status.textContent = 'Envoi…';
@@ -110,18 +204,19 @@
         const res = await fetch('/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, target }),
         });
-        if (!res.ok) throw new Error('Échec');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Échec');
         status.textContent = 'Envoyé';
         status.className = 'status ok';
         textEl.value = '';
       } catch (err) {
-        status.textContent = 'Erreur, réessaie';
+        status.textContent = err.message || 'Erreur';
         status.className = 'status err';
       } finally {
         btn.disabled = false;
-        setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2000);
+        setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2500);
       }
     });
   </script>
