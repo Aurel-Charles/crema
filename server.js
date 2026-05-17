@@ -91,7 +91,7 @@ function findPeerByInstanceId(id) {
 }
 
 function pickAddress(service) {
-  return service.addresses?.find((a) => a.includes('.') && !a.includes(':')) ?? service.host;
+  return service.host?.replace(/\.$/, '') ?? null;
 }
 
 const advertisement = mdns.createAdvertisement(
@@ -105,7 +105,12 @@ const advertisement = mdns.createAdvertisement(
 advertisement.on('error', (err) => console.error('[mDNS advertise]', err.message));
 advertisement.start();
 
-const browser = mdns.createBrowser(mdns.tcp(SERVICE_TYPE));
+// mdns 2.7.2's getaddrinfo step crashes on Node 18+ (deprecated internal API).
+// Stop the resolver after DNSServiceResolve — we use the .local hostname directly,
+// letting the OS resolver (avahi via NSS) handle name-to-IP at fetch time.
+const browser = mdns.createBrowser(mdns.tcp(SERVICE_TYPE), {
+  resolverSequence: [mdns.rst.DNSServiceResolve()],
+});
 
 browser.on('serviceUp', (service) => {
   const txt = service.txtRecord ?? {};
