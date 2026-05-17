@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { Bonjour } from 'bonjour-service';
+import mdns from 'mdns';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { hostname } from 'os';
@@ -13,6 +13,7 @@ const SERVICE_TYPE = 'crema';
 const PORT = Number(process.env.PORT ?? 3000);
 const OWNER = process.env.CREMA_OWNER ?? deriveOwnerFromHostname();
 const INSTANCE_ID = randomUUID();
+const SERVICE_NAME = `crema-${OWNER}-${INSTANCE_ID.slice(0, 8)}`;
 
 function deriveOwnerFromHostname() {
   const h = hostname().replace(/\.local$/, '');
@@ -49,7 +50,7 @@ app.post('/send', async (req, res) => {
   if (!text) return res.status(400).json({ error: 'Message vide' });
   if (!target) return res.status(400).json({ error: 'Destinataire manquant' });
 
-  const peer = peerMap.get(target);
+  const peer = findPeerByInstanceId(target);
   if (!peer) return res.status(404).json({ error: 'Destinataire introuvable' });
 
   try {
@@ -76,31 +77,38 @@ app.post('/inbox', (req, res) => {
   res.json({ ok: true });
 });
 
-const bonjour = new Bonjour();
-const peerMap = new Map();
+const peerMap = new Map(); // service name -> peer
 
 function listPeers() {
-  return [...peerMap.values()]
-    .filter((p) => p.instanceId !== INSTANCE_ID)
-    .map((p) => ({ instanceId: p.instanceId, owner: p.owner }));
+  return [...peerMap.values()].map((p) => ({ instanceId: p.instanceId, owner: p.owner }));
+}
+
+function findPeerByInstanceId(id) {
+  for (const peer of peerMap.values()) {
+    if (peer.instanceId === id) return peer;
+  }
+  return null;
 }
 
 function pickAddress(service) {
-  const v4 = service.addresses?.find((a) => a.includes('.') && !a.includes(':'));
-  return v4 ?? service.referer?.address ?? service.host;
+  return service.addresses?.find((a) => a.includes('.') && !a.includes(':')) ?? service.host;
 }
 
-bonjour.publish({
-  name: `crema-${OWNER}-${INSTANCE_ID.slice(0, 8)}`,
-  type: SERVICE_TYPE,
-  port: PORT,
-  txt: { owner: OWNER, instanceId: INSTANCE_ID },
-});
+const advertisement = mdns.createAdvertisement(
+  mdns.tcp(SERVICE_TYPE),
+  PORT,
+  {
+    name: SERVICE_NAME,
+    txtRecord: { owner: OWNER, instanceId: INSTANCE_ID },
+  },
+);
+advertisement.on('error', (err) => console.error('[mDNS advertise]', err.message));
+advertisement.start();
 
-const browser = bonjour.find({ type: SERVICE_TYPE });
+const browser = mdns.createBrowser(mdns.tcp(SERVICE_TYPE));
 
-browser.on('up', (service) => {
-  const txt = service.txt ?? {};
+browser.on('serviceUp', (service) => {
+  const txt = service.txtRecord ?? {};
   if (!txt.instanceId) return;
   if (txt.instanceId === INSTANCE_ID) return;
   const peer = {
@@ -109,17 +117,20 @@ browser.on('up', (service) => {
     address: pickAddress(service),
     port: service.port,
   };
-  peerMap.set(peer.instanceId, peer);
+  peerMap.set(service.name, peer);
   console.log(`[mDNS] up: ${peer.owner} @ ${peer.address}:${peer.port}`);
 });
 
-browser.on('down', (service) => {
-  const txt = service.txt ?? {};
-  if (!txt.instanceId) return;
-  if (peerMap.delete(txt.instanceId)) {
-    console.log(`[mDNS] down: ${txt.owner}`);
+browser.on('serviceDown', (service) => {
+  const peer = peerMap.get(service.name);
+  if (peer) {
+    peerMap.delete(service.name);
+    console.log(`[mDNS] down: ${peer.owner}`);
   }
 });
+
+browser.on('error', (err) => console.error('[mDNS browse]', err.message));
+browser.start();
 
 httpServer.listen(PORT, () => {
   console.log(`Crema V1 — ${OWNER} on http://localhost:${PORT}`);
@@ -127,11 +138,9 @@ httpServer.listen(PORT, () => {
 
 function shutdown() {
   console.log('\nArrêt…');
-  bonjour.unpublishAll(() => {
-    bonjour.destroy();
-    process.exit(0);
-  });
-  setTimeout(() => process.exit(0), 2000).unref();
+  try { browser.stop(); } catch {}
+  try { advertisement.stop(); } catch {}
+  setTimeout(() => process.exit(0), 300).unref();
 }
 
 process.on('SIGINT', shutdown);
