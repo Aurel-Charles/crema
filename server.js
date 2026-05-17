@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import mdns from 'mdns';
+import SunCalc from 'suncalc';
 import { lookup as dnsLookup } from 'dns/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -15,6 +16,11 @@ const PORT = Number(process.env.PORT ?? 3000);
 const OWNER = process.env.CREMA_OWNER ?? deriveOwnerFromHostname();
 const INSTANCE_ID = randomUUID();
 const SERVICE_NAME = `crema-${OWNER}-${INSTANCE_ID.slice(0, 8)}`;
+
+// Amiens — used to compute sunrise/sunset for the day/night theme.
+// Override via env if Crema gets deployed elsewhere.
+const LAT = Number(process.env.CREMA_LAT ?? 49.8941);
+const LON = Number(process.env.CREMA_LON ?? 2.2958);
 
 function deriveOwnerFromHostname() {
   const h = hostname().replace(/\.local$/, '');
@@ -43,6 +49,17 @@ app.get('/me', (req, res) => {
 
 app.get('/peers', (req, res) => {
   res.json(listPeers());
+});
+
+app.get('/theme-schedule', (req, res) => {
+  const now = new Date();
+  const today = SunCalc.getTimes(now, LAT, LON);
+  const tomorrow = SunCalc.getTimes(new Date(now.getTime() + 24 * 3600 * 1000), LAT, LON);
+  res.json({
+    sunrise: today.sunrise.toISOString(),
+    sunset: today.sunset.toISOString(),
+    nextSunrise: tomorrow.sunrise.toISOString(),
+  });
 });
 
 async function postInbox(address, port, payload) {
@@ -92,6 +109,10 @@ app.post('/inbox', (req, res) => {
 });
 
 const peerMap = new Map(); // service name -> peer
+
+io.on('connection', (socket) => {
+  socket.emit('peers:init', listPeers());
+});
 
 function listPeers() {
   return [...peerMap.values()].map((p) => ({ instanceId: p.instanceId, owner: p.owner }));
@@ -151,8 +172,11 @@ browser.on('serviceUp', async (service) => {
   };
   const existing = peerMap.get(service.name);
   peerMap.set(service.name, peer);
-  if (!existing || existing.address !== address) {
+  if (!existing) {
     console.log(`[mDNS] up: ${peer.owner} @ ${address}:${peer.port}`);
+    io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner });
+  } else if (existing.address !== address) {
+    console.log(`[mDNS] re-resolved: ${peer.owner} @ ${address}:${peer.port}`);
   }
 });
 
@@ -161,6 +185,7 @@ browser.on('serviceDown', (service) => {
   if (peer) {
     peerMap.delete(service.name);
     console.log(`[mDNS] down: ${peer.owner}`);
+    io.emit('peer:down', { instanceId: peer.instanceId });
   }
 });
 
@@ -168,7 +193,7 @@ browser.on('error', (err) => console.error('[mDNS browse]', err.message));
 browser.start();
 
 httpServer.listen(PORT, () => {
-  console.log(`Crema V1 — ${OWNER} on http://localhost:${PORT}`);
+  console.log(`Crema V2 — ${OWNER} on http://localhost:${PORT}`);
 });
 
 function shutdown() {

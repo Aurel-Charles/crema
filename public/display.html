@@ -7,10 +7,25 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; height: 100%; }
+
+    :root {
+      --bg: #1a1410;
+      --accent: #f4a65a;
+      --text: #f2e4cc;
+      --muted: #9c7e54;
+      --presence: #87c459;
+    }
+    body.day {
+      --bg: #2a1d14;
+      --accent: #ffb870;
+      --text: #fff4dd;
+      --muted: #c89968;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #1a1410;
-      color: #f2e4cc;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
       padding: 32px;
       overflow: hidden;
@@ -18,53 +33,122 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: background-color 1.5s ease, color 1.5s ease;
     }
+
+    .topbar {
+      position: absolute;
+      top: 24px;
+      right: 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .presence {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: clamp(13px, 1.5vw, 18px);
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .presence .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--presence);
+      box-shadow: 0 0 8px var(--presence);
+      flex-shrink: 0;
+    }
+    .presence .name { color: var(--text); font-weight: 600; }
 
     #screen {
       max-width: 90vw;
       text-align: center;
-      line-height: 1.2;
+      line-height: 1.15;
     }
 
-    #screen .idle-text {
-      font-size: clamp(72px, 18vw, 180px);
-      font-weight: 300;
-      color: #f4a65a;
-      letter-spacing: -0.02em;
+    .idle .clock {
+      font-size: clamp(96px, 22vw, 240px);
+      font-weight: 200;
+      color: var(--accent);
+      letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums;
+      transition: color 1.5s ease;
+    }
+    .idle .date {
+      font-size: clamp(18px, 2.6vw, 32px);
+      color: var(--muted);
+      margin-top: 8px;
+      text-transform: capitalize;
+      font-weight: 400;
+      transition: color 1.5s ease;
     }
 
-    #screen .from {
+    .msg .from {
       font-size: clamp(14px, 1.6vw, 20px);
       font-weight: 600;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: #9c7e54;
+      color: var(--muted);
       margin-bottom: 24px;
     }
-
-    #screen .message {
+    .msg .text {
       font-size: clamp(38px, 6vw, 64px);
       font-weight: 500;
-      color: #f2e4cc;
+      color: var(--text);
     }
   </style>
 </head>
-<body>
-  <div id="screen"><span class="idle-text">Prêt</span></div>
+<body class="night">
+  <header class="topbar">
+    <div id="presence-list"></div>
+  </header>
+
+  <main id="screen"></main>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    // ===== Clock + date =====
     const screen = document.getElementById('screen');
     const MESSAGE_TTL_MS = 30_000;
+    const dateFmt = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long',
+    });
+    const timeFmt = new Intl.DateTimeFormat('fr-FR', {
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+
     let resetTimer = null;
+    let mode = 'idle';
+
+    function renderIdle() {
+      const now = new Date();
+      screen.className = 'idle';
+      screen.innerHTML = `
+        <div class="clock">${timeFmt.format(now)}</div>
+        <div class="date">${dateFmt.format(now)}</div>
+      `;
+    }
+
+    function tick() {
+      if (mode === 'idle') renderIdle();
+    }
 
     function showIdle() {
-      screen.innerHTML = '<span class="idle-text">Prêt</span>';
+      mode = 'idle';
+      renderIdle();
     }
 
     function showMessage({ text, from }) {
+      mode = 'message';
       const fromLabel = from ? `<div class="from">${escapeHtml(from)}</div>` : '';
-      screen.innerHTML = `${fromLabel}<div class="message">${escapeHtml(text)}</div>`;
+      screen.className = 'msg';
+      screen.innerHTML = `${fromLabel}<div class="text">${escapeHtml(text)}</div>`;
       if (resetTimer) clearTimeout(resetTimer);
       resetTimer = setTimeout(showIdle, MESSAGE_TTL_MS);
     }
@@ -75,7 +159,86 @@
       }[c]));
     }
 
+    // Align the next tick on the start of the next minute, then every minute.
+    showIdle();
+    const msToNextMinute = 60_000 - (Date.now() % 60_000);
+    setTimeout(() => {
+      tick();
+      setInterval(tick, 60_000);
+    }, msToNextMinute);
+
+    // ===== Day/night theme =====
+    let schedule = null;
+
+    async function loadSchedule() {
+      try {
+        const r = await fetch('/theme-schedule');
+        schedule = await r.json();
+        applyTheme();
+      } catch {}
+    }
+
+    function applyTheme() {
+      if (!schedule) return;
+      const now = new Date();
+      const sunrise = new Date(schedule.sunrise);
+      const sunset = new Date(schedule.sunset);
+      const isDay = now >= sunrise && now < sunset;
+      document.body.classList.toggle('day', isDay);
+      document.body.classList.toggle('night', !isDay);
+    }
+
+    function scheduleMidnightRefresh() {
+      const now = new Date();
+      const next = new Date(now);
+      next.setDate(now.getDate() + 1);
+      next.setHours(0, 0, 30, 0);
+      setTimeout(async () => {
+        await loadSchedule();
+        scheduleMidnightRefresh();
+      }, next - now);
+    }
+
+    loadSchedule();
+    setInterval(applyTheme, 60_000);
+    scheduleMidnightRefresh();
+
+    // ===== Presence =====
+    const presenceList = document.getElementById('presence-list');
+    const peers = new Map(); // instanceId -> owner
+
+    function renderPresence() {
+      if (peers.size === 0) {
+        presenceList.innerHTML = '';
+        return;
+      }
+      presenceList.innerHTML = [...peers.values()]
+        .map((owner) => `
+          <div class="presence">
+            <span class="dot"></span>
+            <span><span class="name">${escapeHtml(owner)}</span> en ligne</span>
+          </div>
+        `)
+        .join('');
+    }
+
+    // ===== Socket =====
     const socket = io();
+
+    socket.on('peers:init', (list) => {
+      peers.clear();
+      for (const p of list) peers.set(p.instanceId, p.owner);
+      renderPresence();
+    });
+    socket.on('peer:up', ({ instanceId, owner }) => {
+      peers.set(instanceId, owner);
+      renderPresence();
+    });
+    socket.on('peer:down', ({ instanceId }) => {
+      peers.delete(instanceId);
+      renderPresence();
+    });
+
     socket.on('message', (data) => {
       if (data && typeof data.text === 'string' && data.text.trim()) {
         showMessage({ text: data.text, from: data.from });

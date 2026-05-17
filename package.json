@@ -1,7 +1,7 @@
 {
   "name": "crema",
-  "version": "0.1.0",
-  "description": "Pi messenger — V1 multi-Pi with mDNS discovery",
+  "version": "0.2.0",
+  "description": "Pi messenger — V2 idle clock, day/night theme, peer presence",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "dependencies": {
     "express": "^4.21.2",
     "mdns": "^2.7.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "suncalc": "^1.9.0"
   }
 }
