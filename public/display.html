@@ -190,6 +190,67 @@
       transform: scaleX(1);
       opacity: 0.7;
     }
+
+    /* Shortcuts row in idle (V5) */
+    #shortcuts-bar {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      max-width: 92vw;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    #shortcuts-bar:empty { display: none; }
+    .shortcut-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 16px;
+      min-width: 96px;
+      min-height: 78px;
+      font-family: inherit;
+      background: rgba(244, 166, 90, 0.08);
+      border: 1.5px solid rgba(244, 166, 90, 0.35);
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      color: var(--text);
+    }
+    .shortcut-btn:active {
+      transform: scale(0.96);
+      background: rgba(244, 166, 90, 0.22);
+    }
+    .shortcut-btn:disabled {
+      opacity: 0.32;
+      cursor: default;
+    }
+    .shortcut-btn .icon {
+      font-size: 26px;
+      line-height: 1;
+    }
+    .shortcut-btn .lbl {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .shortcut-btn.sent {
+      background: rgba(135, 196, 89, 0.18);
+      border-color: var(--presence);
+    }
+    .shortcut-btn.failed {
+      background: rgba(196, 90, 69, 0.18);
+      border-color: #c45a45;
+    }
   </style>
 </head>
 <body class="night">
@@ -201,12 +262,15 @@
 
   <main id="screen"></main>
 
+  <footer id="shortcuts-bar"></footer>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     // ===== Elements =====
     const screen = document.getElementById('screen');
     const presenceList = document.getElementById('presence-list');
     const notifEl = document.getElementById('notif');
+    const shortcutsBar = document.getElementById('shortcuts-bar');
 
     const DEFAULT_DISPLAY_MS = 30_000;
     const MIN_DISPLAY_MS = 2_000;
@@ -226,6 +290,7 @@
     let notifTimer = null;
     let currentMsg = null;
     let replies = [];
+    let shortcuts = [];
     const peers = new Map();
 
     // ===== Time formatting =====
@@ -270,6 +335,7 @@
       currentMsg = null;
       if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
       renderIdle();
+      renderShortcuts();
     }
 
     function showMessage(data) {
@@ -278,6 +344,7 @@
       const expiresAtMs = data.expiresAt ? Date.parse(data.expiresAt) : null;
       currentMsg = { ...data, receivedAt, expiresAtMs };
       renderMessage();
+      renderShortcuts(); // will hide while in message mode
 
       if (resetTimer) clearTimeout(resetTimer);
       const ttl = expiresAtMs
@@ -360,6 +427,28 @@
         `);
       }
       presenceList.innerHTML = rows.join('');
+    }
+
+    function isOwnerOnline(owner) {
+      for (const o of peers.values()) if (o === owner) return true;
+      return false;
+    }
+
+    function renderShortcuts() {
+      if (mode !== 'idle' || shortcuts.length === 0) {
+        shortcutsBar.innerHTML = '';
+        return;
+      }
+      shortcutsBar.innerHTML = shortcuts.map((s, i) => {
+        const online = isOwnerOnline(s.targetOwner);
+        const iconHtml = s.icon ? `<span class="icon">${escapeHtml(s.icon)}</span>` : '';
+        return `
+          <button class="shortcut-btn" data-i="${i}" ${online ? '' : 'disabled'}>
+            ${iconHtml}
+            <span class="lbl">${escapeHtml(s.label)}</span>
+          </button>
+        `;
+      }).join('');
     }
 
     function showNotif(text) {
@@ -470,6 +559,50 @@
     }
     loadReplies();
 
+    // ===== Shortcuts fetch + tap handler =====
+    async function loadShortcuts() {
+      try {
+        const r = await fetch('/shortcuts');
+        shortcuts = await r.json();
+        renderShortcuts();
+      } catch {}
+    }
+    loadShortcuts();
+
+    shortcutsBar.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.shortcut-btn');
+      if (!btn || btn.disabled) return;
+      const i = Number(btn.dataset.i);
+      const s = shortcuts[i];
+      if (!s) return;
+
+      const allBtns = shortcutsBar.querySelectorAll('.shortcut-btn');
+      for (const b of allBtns) b.disabled = true;
+
+      const lblEl = btn.querySelector('.lbl');
+      const originalLabel = lblEl ? lblEl.textContent : '';
+
+      try {
+        const r = await fetch('/shortcut/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: s.id }),
+        });
+        if (!r.ok) throw new Error();
+        btn.classList.add('sent');
+        if (lblEl) lblEl.textContent = '✓ Envoyé';
+        setTimeout(renderShortcuts, 1500);
+      } catch {
+        btn.classList.add('failed');
+        if (lblEl) lblEl.textContent = '✕ Échec';
+        setTimeout(() => {
+          btn.classList.remove('failed');
+          if (lblEl) lblEl.textContent = originalLabel;
+          renderShortcuts();
+        }, 2000);
+      }
+    });
+
     // ===== Socket =====
     const socket = io();
 
@@ -477,19 +610,27 @@
       peers.clear();
       for (const p of list) peers.set(p.instanceId, p.owner);
       renderPresence();
+      renderShortcuts();
     });
     socket.on('peer:up', ({ instanceId, owner }) => {
       peers.set(instanceId, owner);
       renderPresence();
+      renderShortcuts();
     });
     socket.on('peer:down', ({ instanceId }) => {
       peers.delete(instanceId);
       renderPresence();
+      renderShortcuts();
     });
 
     socket.on('replies:updated', (list) => {
       replies = list;
       if (mode === 'message') renderMessage();
+    });
+
+    socket.on('shortcuts:updated', (list) => {
+      shortcuts = list;
+      renderShortcuts();
     });
 
     socket.on('message', (data) => {

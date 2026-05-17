@@ -1,7 +1,7 @@
 {
   "name": "crema",
-  "version": "0.4.0",
-  "description": "Pi messenger — V4 TTL, custom response options, expiry notifications",
+  "version": "0.5.0",
+  "description": "Pi messenger — V5 touch shortcuts on the Pi screen",
   "type": "module",
   "main": "server.js",
   "scripts": {

@@ -10,16 +10,14 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <title>Crema — Réponses rapides</title>
+  <title>Crema — Préférences</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; height: 100%; }
+    html, body { margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #f7f7f8;
       color: #1a1410;
-      display: flex;
-      flex-direction: column;
       min-height: 100vh;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
@@ -51,21 +49,25 @@
     }
 
     form {
-      flex: 1;
       display: flex;
       flex-direction: column;
       padding: 20px;
-      gap: 14px;
+      gap: 28px;
     }
 
+    section h2 {
+      margin: 0 0 4px;
+      font-size: 17px;
+      font-weight: 600;
+    }
     .hint {
       font-size: 13px;
       color: #6b6b70;
-      margin-bottom: 4px;
+      margin: 0 0 12px;
     }
 
+    /* Rows (replies) */
     .rows { display: flex; flex-direction: column; gap: 10px; }
-
     .row {
       display: flex;
       gap: 8px;
@@ -83,14 +85,16 @@
       outline: none;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .row input:focus {
+    .row input:focus, .card input:focus, .card select:focus {
       border-color: #f4a65a;
       box-shadow: 0 0 0 3px rgba(244, 166, 90, 0.2);
     }
-    .row .del {
+    .del {
       width: 44px;
       height: 44px;
+      padding: 0;
       font-size: 20px;
+      font-family: inherit;
       color: #6b6b70;
       background: #fff;
       border: 1px solid #e2e2e6;
@@ -98,7 +102,60 @@
       cursor: pointer;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .row .del:active { background: #fce8e6; color: #b3261e; border-color: #b3261e; }
+    .del:active { background: #fce8e6; color: #b3261e; border-color: #b3261e; }
+
+    /* Cards (shortcuts) */
+    .cards { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e2e6;
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card input, .card select {
+      font-size: 16px;
+      font-family: inherit;
+      padding: 12px 14px;
+      border: 1px solid #e2e2e6;
+      border-radius: 12px;
+      background: #fff;
+      color: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .card-head {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .card-head .icon-input {
+      width: 60px;
+      text-align: center;
+      padding: 12px 4px;
+    }
+    .card-head .label-input { flex: 1; }
+    .card-head .del { width: 44px; height: auto; }
+    .card-row {
+      display: flex;
+      gap: 8px;
+    }
+    .card-row select {
+      flex: 1;
+      appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%236b6b70' d='M6 8L2 4h8z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+    .card-row label {
+      align-self: center;
+      font-size: 13px;
+      color: #6b6b70;
+      min-width: 60px;
+    }
 
     .add {
       align-self: flex-start;
@@ -111,6 +168,7 @@
       border-radius: 12px;
       cursor: pointer;
       transition: border-color 0.15s, background 0.15s;
+      margin-top: 8px;
     }
     .add:active { background: #ebebef; }
     .add:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -126,7 +184,6 @@
       border-radius: 14px;
       cursor: pointer;
       transition: opacity 0.15s, transform 0.05s;
-      margin-top: auto;
     }
     .save:active { transform: scale(0.98); }
     .save:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -144,13 +201,24 @@
 <body>
   <header>
     <a href="/" class="back" aria-label="Retour">←</a>
-    <h1>Réponses rapides</h1>
+    <h1>Préférences</h1>
   </header>
 
   <form id="form">
-    <p class="hint">Boutons proposés sur le Pi quand tu reçois un message. Max 5.</p>
-    <div class="rows" id="rows"></div>
-    <button type="button" class="add" id="add">+ Ajouter</button>
+    <section>
+      <h2>Réponses rapides</h2>
+      <p class="hint">Boutons proposés sur le Pi quand tu reçois un message. Max 5.</p>
+      <div class="rows" id="replies-rows"></div>
+      <button type="button" class="add" id="reply-add">+ Ajouter</button>
+    </section>
+
+    <section>
+      <h2>Raccourcis</h2>
+      <p class="hint">Boutons sur l'écran du Pi pour envoyer un message d'un tap. Max 6.</p>
+      <div class="cards" id="shortcuts-cards"></div>
+      <button type="button" class="add" id="shortcut-add">+ Ajouter un raccourci</button>
+    </section>
+
     <div class="status" id="status"></div>
     <button type="submit" class="save" id="save">Enregistrer</button>
   </form>
@@ -160,13 +228,26 @@
       navigator.serviceWorker.register('/service-worker.js').catch(() => {});
     }
 
-    const MAX = 5;
-    const rowsEl = document.getElementById('rows');
-    const addBtn = document.getElementById('add');
+    const MAX_REPLIES = 5;
+    const MAX_SHORTCUTS = 6;
+
+    const repliesRowsEl = document.getElementById('replies-rows');
+    const replyAddBtn = document.getElementById('reply-add');
+    const shortcutsCardsEl = document.getElementById('shortcuts-cards');
+    const shortcutAddBtn = document.getElementById('shortcut-add');
     const status = document.getElementById('status');
     const form = document.getElementById('form');
 
-    function rowTemplate(value = '') {
+    let onlineOwners = [];
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    // ===== Replies =====
+    function replyRow(value = '') {
       const div = document.createElement('div');
       div.className = 'row';
       div.innerHTML = `
@@ -176,59 +257,157 @@
       div.querySelector('input').value = value;
       div.querySelector('.del').addEventListener('click', () => {
         div.remove();
-        updateAddState();
+        updateAddStates();
       });
       return div;
     }
 
-    function updateAddState() {
-      addBtn.disabled = rowsEl.children.length >= MAX;
+    function renderReplies(list) {
+      repliesRowsEl.innerHTML = '';
+      for (const r of list) repliesRowsEl.appendChild(replyRow(r.label));
+      if (list.length === 0) repliesRowsEl.appendChild(replyRow());
+      updateAddStates();
     }
 
-    function render(list) {
-      rowsEl.innerHTML = '';
-      for (const r of list) rowsEl.appendChild(rowTemplate(r.label));
-      if (list.length === 0) rowsEl.appendChild(rowTemplate());
-      updateAddState();
-    }
-
-    addBtn.addEventListener('click', () => {
-      if (rowsEl.children.length >= MAX) return;
-      const row = rowTemplate();
-      rowsEl.appendChild(row);
+    replyAddBtn.addEventListener('click', () => {
+      if (repliesRowsEl.children.length >= MAX_REPLIES) return;
+      const row = replyRow();
+      repliesRowsEl.appendChild(row);
       row.querySelector('input').focus();
-      updateAddState();
+      updateAddStates();
     });
 
-    async function load() {
+    // ===== Shortcuts =====
+    function populateTargetSelect(sel, currentValue = '') {
+      const owners = new Set(onlineOwners);
+      if (currentValue) owners.add(currentValue);
+      const options = ['<option value="">Choisir…</option>'];
+      for (const o of owners) {
+        const offline = !onlineOwners.includes(o);
+        options.push(`<option value="${esc(o)}">${esc(o)}${offline ? ' (hors ligne)' : ''}</option>`);
+      }
+      sel.innerHTML = options.join('');
+      if (currentValue) sel.value = currentValue;
+    }
+
+    function shortcutCard(s = {}) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      if (s.id) card.dataset.id = s.id;
+      card.innerHTML = `
+        <div class="card-head">
+          <input class="icon-input" type="text" maxlength="4" placeholder="🍽️" value="${esc(s.icon ?? '')}" />
+          <input class="label-input" type="text" maxlength="30" placeholder="À table" value="${esc(s.label ?? '')}" />
+          <button type="button" class="del" aria-label="Supprimer">×</button>
+        </div>
+        <input class="text-input" type="text" maxlength="200" placeholder="Message à envoyer" value="${esc(s.text ?? '')}" />
+        <div class="card-row">
+          <label>Vers</label>
+          <select class="target-select"></select>
+        </div>
+        <div class="card-row">
+          <label>Pendant</label>
+          <select class="ttl-select">
+            <option value="30000">30 s</option>
+            <option value="300000">5 min</option>
+            <option value="900000">15 min</option>
+            <option value="3600000">1 h</option>
+            <option value="14400000">4 h</option>
+          </select>
+        </div>
+      `;
+      populateTargetSelect(card.querySelector('.target-select'), s.targetOwner ?? '');
+      card.querySelector('.ttl-select').value = String(s.ttlMs ?? 300000);
+      card.querySelector('.del').addEventListener('click', () => {
+        card.remove();
+        updateAddStates();
+      });
+      return card;
+    }
+
+    function renderShortcuts(list) {
+      shortcutsCardsEl.innerHTML = '';
+      for (const s of list) shortcutsCardsEl.appendChild(shortcutCard(s));
+      updateAddStates();
+    }
+
+    shortcutAddBtn.addEventListener('click', () => {
+      if (shortcutsCardsEl.children.length >= MAX_SHORTCUTS) return;
+      const card = shortcutCard();
+      shortcutsCardsEl.appendChild(card);
+      card.querySelector('.label-input').focus();
+      updateAddStates();
+    });
+
+    function updateAddStates() {
+      replyAddBtn.disabled = repliesRowsEl.children.length >= MAX_REPLIES;
+      shortcutAddBtn.disabled = shortcutsCardsEl.children.length >= MAX_SHORTCUTS;
+    }
+
+    // ===== Load =====
+    async function loadPeers() {
       try {
-        const r = await fetch('/replies');
-        const list = await r.json();
-        render(list);
+        const r = await fetch('/peers');
+        const peers = await r.json();
+        onlineOwners = [...new Set(peers.map((p) => p.owner))];
+      } catch {
+        onlineOwners = [];
+      }
+    }
+
+    async function loadAll() {
+      try {
+        await loadPeers();
+        const [rR, rS] = await Promise.all([fetch('/replies'), fetch('/shortcuts')]);
+        const [repliesList, shortcutsList] = await Promise.all([rR.json(), rS.json()]);
+        renderReplies(repliesList);
+        renderShortcuts(shortcutsList);
       } catch {
         status.textContent = 'Impossible de charger';
         status.className = 'status err';
       }
     }
 
+    // ===== Save =====
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const payload = [...rowsEl.querySelectorAll('input')]
+
+      const repliesPayload = [...repliesRowsEl.querySelectorAll('input')]
         .map((i) => ({ label: i.value.trim() }))
         .filter((r) => r.label);
+
+      const shortcutsPayload = [...shortcutsCardsEl.querySelectorAll('.card')]
+        .map((card) => ({
+          id: card.dataset.id || undefined,
+          icon: card.querySelector('.icon-input').value.trim(),
+          label: card.querySelector('.label-input').value.trim(),
+          text: card.querySelector('.text-input').value.trim(),
+          targetOwner: card.querySelector('.target-select').value,
+          ttlMs: Number(card.querySelector('.ttl-select').value),
+        }))
+        .filter((s) => s.label && s.text && s.targetOwner);
 
       status.textContent = 'Enregistrement…';
       status.className = 'status';
 
       try {
-        const r = await fetch('/replies', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error || 'Erreur');
-        render(data);
+        const [rR, rS] = await Promise.all([
+          fetch('/replies', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(repliesPayload),
+          }),
+          fetch('/shortcuts', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(shortcutsPayload),
+          }),
+        ]);
+        const [savedReplies, savedShortcuts] = await Promise.all([rR.json(), rS.json()]);
+        if (!rR.ok) throw new Error(savedReplies.error || 'Échec (réponses)');
+        if (!rS.ok) throw new Error(savedShortcuts.error || 'Échec (raccourcis)');
+        renderReplies(savedReplies);
+        renderShortcuts(savedShortcuts);
         status.textContent = 'Enregistré';
         status.className = 'status ok';
         setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2000);
@@ -238,7 +417,7 @@
       }
     });
 
-    load();
+    loadAll();
   </script>
 </body>
 </html>

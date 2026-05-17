@@ -25,8 +25,12 @@ const LON = Number(process.env.CREMA_LON ?? 2.2958);
 
 const DATA_DIR = join(__dirname, 'data');
 const REPLIES_FILE = join(DATA_DIR, 'replies.json');
+const SHORTCUTS_FILE = join(DATA_DIR, 'shortcuts.json');
 const MAX_REPLIES = 5;
+const MAX_SHORTCUTS = 6;
 const MAX_LABEL_LENGTH = 30;
+const MAX_SHORTCUT_TEXT = 200;
+const MAX_ICON_LENGTH = 8;
 const DEFAULT_REPLIES = [{ label: '👍' }, { label: 'Vu' }, { label: 'Plus tard' }];
 
 // V4 TTL bounds — keep generous on both ends.
@@ -136,6 +140,68 @@ app.put('/replies', async (req, res) => {
   }
 });
 
+// ===== Shortcuts (V5) =====
+
+let shortcuts = [];
+
+function sanitizeShortcuts(input) {
+  if (!Array.isArray(input)) throw new Error('Liste invalide');
+  const cleaned = [];
+  for (const item of input) {
+    const label = typeof item?.label === 'string' ? item.label.trim() : '';
+    const text = typeof item?.text === 'string' ? item.text.trim() : '';
+    const icon = typeof item?.icon === 'string' ? item.icon.trim() : '';
+    const targetOwner = typeof item?.targetOwner === 'string' ? item.targetOwner.trim() : '';
+    const ttlMs = clampTtl(item?.ttlMs);
+    if (!label || label.length > MAX_LABEL_LENGTH) continue;
+    if (!text || text.length > MAX_SHORTCUT_TEXT) continue;
+    if (!targetOwner || targetOwner.length > MAX_LABEL_LENGTH) continue;
+    if (!ttlMs) continue;
+    if (icon.length > MAX_ICON_LENGTH) continue;
+    const id = (typeof item?.id === 'string' && item.id) ? item.id : randomUUID();
+    cleaned.push({ id, label, icon, text, targetOwner, ttlMs });
+    if (cleaned.length >= MAX_SHORTCUTS) break;
+  }
+  return cleaned;
+}
+
+async function loadShortcuts() {
+  try {
+    const raw = await readFile(SHORTCUTS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    shortcuts = sanitizeShortcuts(parsed);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      shortcuts = [];
+    } else {
+      console.error('[shortcuts] load failed:', err.message);
+      shortcuts = [];
+    }
+  }
+}
+
+async function persistShortcuts() {
+  await mkdir(DATA_DIR, { recursive: true });
+  const tmp = `${SHORTCUTS_FILE}.tmp`;
+  await writeFile(tmp, JSON.stringify(shortcuts, null, 2), 'utf8');
+  await rename(tmp, SHORTCUTS_FILE);
+}
+
+app.get('/shortcuts', (req, res) => {
+  res.json(shortcuts);
+});
+
+app.put('/shortcuts', async (req, res) => {
+  try {
+    shortcuts = sanitizeShortcuts(req.body);
+    await persistShortcuts();
+    io.emit('shortcuts:updated', shortcuts);
+    res.json(shortcuts);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/reply', async (req, res) => {
   const to = typeof req.body?.to === 'string' ? req.body.to : '';
   const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
@@ -231,6 +297,28 @@ function resolvePending(id) {
   return true;
 }
 
+// Shared send pipeline used by /send and /shortcut/send. Generates the msgId
+// + expiresAt, posts to the peer (with one re-resolve retry on failure), and
+// registers the pending message so the expiry timer can fire later.
+async function sendToPeer(peer, { text, ttlMs, responseOptions = null }) {
+  const id = randomUUID();
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  const opts = responseOptions && responseOptions.length > 0 ? responseOptions : null;
+  const payload = { id, text, from: OWNER, fromInstanceId: INSTANCE_ID, expiresAt, responseOptions: opts };
+
+  try {
+    await postInbox(peer.address, peer.port, payload);
+  } catch (err1) {
+    console.warn(`[send] retry → ${peer.owner} (${err1.message})`);
+    const fresh = await resolveHost(peer.host);
+    peer.address = fresh;
+    await postInbox(fresh, peer.port, payload);
+  }
+
+  trackPending({ id, text, targetOwner: peer.owner, expiresAt: Date.parse(expiresAt) });
+  return { id, expiresAt };
+}
+
 app.post('/send', async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const target = typeof req.body?.target === 'string' ? req.body.target : '';
@@ -243,34 +331,31 @@ app.post('/send', async (req, res) => {
   const responseOptions = sanitizeResponseOptions(req.body?.responseOptions);
   const defaultTtl = responseOptions.length > 0 ? 3600_000 : 300_000;
   const ttlMs = clampTtl(req.body?.ttlMs) ?? defaultTtl;
-  const id = randomUUID();
-  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-
-  const payload = {
-    id,
-    text,
-    from: OWNER,
-    fromInstanceId: INSTANCE_ID,
-    expiresAt,
-    responseOptions: responseOptions.length > 0 ? responseOptions : null,
-  };
 
   try {
-    await postInbox(peer.address, peer.port, payload);
-    trackPending({ id, text, targetOwner: peer.owner, expiresAt: Date.parse(expiresAt) });
-    return res.json({ ok: true, id, expiresAt });
-  } catch (err1) {
-    console.warn(`[send] retry → ${peer.owner} (${err1.message})`);
-    try {
-      const fresh = await resolveHost(peer.host);
-      peer.address = fresh;
-      await postInbox(fresh, peer.port, payload);
-      trackPending({ id, text, targetOwner: peer.owner, expiresAt: Date.parse(expiresAt) });
-      return res.json({ ok: true, id, expiresAt });
-    } catch (err2) {
-      console.error(`[send] failed → ${peer.owner}:`, err2.message);
-      return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
-    }
+    const result = await sendToPeer(peer, { text, ttlMs, responseOptions });
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(`[send] failed → ${peer.owner}:`, err.message);
+    return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
+  }
+});
+
+app.post('/shortcut/send', async (req, res) => {
+  const id = typeof req.body?.id === 'string' ? req.body.id : '';
+  if (!id) return res.status(400).json({ error: 'Raccourci manquant' });
+  const shortcut = shortcuts.find((s) => s.id === id);
+  if (!shortcut) return res.status(404).json({ error: 'Raccourci introuvable' });
+
+  const peer = [...peerMap.values()].find((p) => p.owner === shortcut.targetOwner);
+  if (!peer) return res.status(404).json({ error: `${shortcut.targetOwner} hors ligne` });
+
+  try {
+    const result = await sendToPeer(peer, { text: shortcut.text, ttlMs: shortcut.ttlMs });
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error(`[shortcut] failed → ${peer.owner}:`, err.message);
+    return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
   }
 });
 
@@ -397,9 +482,10 @@ browser.on('error', (err) => console.error('[mDNS browse]', err.message));
 browser.start();
 
 await loadReplies();
+await loadShortcuts();
 
 httpServer.listen(PORT, () => {
-  console.log(`Crema V4 — ${OWNER} on http://localhost:${PORT}`);
+  console.log(`Crema V5 — ${OWNER} on http://localhost:${PORT}`);
 });
 
 function shutdown() {
