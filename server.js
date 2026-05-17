@@ -45,6 +45,16 @@ app.get('/peers', (req, res) => {
   res.json(listPeers());
 });
 
+async function postInbox(address, port, payload) {
+  const r = await fetch(`http://${address}:${port}/inbox`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+}
+
 app.post('/send', async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const target = typeof req.body?.target === 'string' ? req.body.target : '';
@@ -54,19 +64,22 @@ app.post('/send', async (req, res) => {
   const peer = findPeerByInstanceId(target);
   if (!peer) return res.status(404).json({ error: 'Destinataire introuvable' });
 
+  const payload = { text, from: OWNER };
+
   try {
-    const url = `http://${peer.address}:${peer.port}/inbox`;
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, from: OWNER }),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error(`[send] failed → ${peer.owner}:`, err.message);
-    res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
+    await postInbox(peer.address, peer.port, payload);
+    return res.json({ ok: true });
+  } catch (err1) {
+    console.warn(`[send] retry → ${peer.owner} (${err1.message})`);
+    try {
+      const fresh = await resolveHost(peer.host);
+      peer.address = fresh;
+      await postInbox(fresh, peer.port, payload);
+      return res.json({ ok: true });
+    } catch (err2) {
+      console.error(`[send] failed → ${peer.owner}:`, err2.message);
+      return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
+    }
   }
 });
 
