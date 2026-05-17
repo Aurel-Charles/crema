@@ -1,13 +1,15 @@
 # Crema
 
 Local LAN messenger between Raspberry Pis on always-on screens. Send a short
-message from your phone (PWA) and it surfaces on the recipient's Pi screen.
-Each message carries its own time-to-live that defines the sender's
-availability window; the recipient sees a live countdown and can fire back a
-tap-friendly reply. Each Pi sits in idle as an ambient amber clock with
-day/night theming and shows who else is online on the LAN.
+message from your phone (PWA) or with a one-tap shortcut on the Pi screen
+itself, and it surfaces on the recipient's Pi. Each message carries its own
+time-to-live that defines the sender's availability window; the recipient
+sees a live countdown and can fire back a tap-friendly reply. Each Pi sits
+in idle as an ambient amber clock with day/night theming, shows who else is
+online on the LAN, and exposes its configured shortcuts at the bottom of the
+screen.
 
-**Current version:** [v4.0.0](https://github.com/Aurel-Charles/crema/releases/tag/v4.0.0)
+**Current version:** [v5.0.1](https://github.com/Aurel-Charles/crema/releases/tag/v5.0.1)
 — see [CLAUDE.md](./CLAUDE.md) for the full project spec and roadmap.
 
 ## What works today
@@ -16,6 +18,9 @@ day/night theming and shows who else is online on the LAN.
   no single point of failure.
 - **mDNS auto-discovery** — Pis find each other on the LAN automatically;
   add another Pi by flashing the same image.
+- **Active health check** — each Pi pings every peer's `/me` every 10 s and
+  drops the entry after 3 consecutive failures (~30 s). Catches reboots and
+  power cuts that mDNS "goodbye" packets miss.
 - **PWA sender** — install `http://pi-<name>.local:3000` to your phone's home
   screen, pick a recipient, send.
 - **Display kiosk** — fullscreen Chromium showing clock + date + presence in
@@ -37,6 +42,11 @@ day/night theming and shows who else is online on the LAN.
   message only.
 - **Expiry notifications (V4)** — if your own message expires without a
   reply, your display surfaces a quiet top-left toast for 10 s.
+- **Touch shortcuts on the Pi (V5)** — up to 6 preconfigured one-tap
+  shortcuts at the bottom of the idle screen. Each shortcut sends a preset
+  message to its assigned peer with its own TTL. Greyed out when the target
+  peer is offline. Configured per Pi via the same `/settings` page (now
+  "Préférences" with a Raccourcis section).
 - **Send reliability** — retry with hostname re-resolution on transient
   avahi flakiness; stale peers dropped immediately when a new instance
   announces under the same owner; mDNS shutdown grace so the "bye" packet
@@ -49,16 +59,20 @@ Each Pi runs the same Node process which:
   kiosk (`/display`) over Express.
 - Announces itself on the LAN as `_crema._tcp` via mDNS, with `owner` and
   `instanceId` in the TXT record.
-- Browses for other `_crema._tcp` services and keeps a live peer map.
-- Pushes incoming messages, presence events, replies-config changes, and
-  own-message expiry notifications to the display over Socket.IO.
+- Browses for other `_crema._tcp` services and keeps a live peer map. A
+  background health check pings each peer's `/me` every 10 s to evict
+  unreachable entries that mDNS missed.
+- Pushes incoming messages, presence events, replies/shortcuts config
+  changes, and own-message expiry notifications to the display over
+  Socket.IO.
 
 When the PWA sends, it `POST`s to its local Crema server, which generates a
 message id + `expiresAt`, forwards the payload to the target peer's
 `/inbox`, and starts a local expiry timer. The peer's `/inbox` broadcasts
 to its own display. When the peer fires a reply via `/reply`, the payload
 includes `replyToMsgId`, which lets the original sender's server clear its
-expiry timer before the toast fires.
+expiry timer before the toast fires. Shortcut taps on the Pi go through
+`/shortcut/send` which reuses the same pipeline as the PWA path.
 
 ## Tech stack
 
@@ -66,8 +80,8 @@ Node.js 20, Express, Socket.IO, [`mdns`](https://github.com/agnat/node_mdns)
 (via avahi compat on Linux), [`suncalc`](https://github.com/mourner/suncalc).
 Frontend is vanilla HTML/CSS/JS — no framework.
 
-Per-Pi runtime state (quick replies config) lives in `data/replies.json`,
-which is gitignored.
+Per-Pi runtime state lives in `data/` (gitignored): `replies.json` for the
+quick-reply config, `shortcuts.json` for the touch shortcuts.
 
 ## Setting up a new Pi
 
@@ -137,8 +151,12 @@ ssh <user>@pi-<name>.local pkill -f chromium
   (install `avahi-utils` if missing)
 - **Override location for sunrise/sunset:** set `CREMA_LAT` / `CREMA_LON` in
   `/etc/systemd/system/crema.service` under `[Service]` as `Environment=`.
-- **Inspect / reset quick-replies config:** `cat ~/crema/data/replies.json`
-  — delete the file to re-seed the defaults on next restart.
+- **Inspect / reset per-Pi config:** `cat ~/crema/data/replies.json` or
+  `cat ~/crema/data/shortcuts.json`. Delete the file to wipe and re-seed
+  (replies get the defaults back, shortcuts stay empty).
+- **Force peer re-discovery** after a long network outage: when both Pis
+  recover, neither will rebroadcast its mDNS announcement spontaneously, so
+  `sudo systemctl restart crema` on each clears the slate.
 
 ## Known gotchas
 
@@ -157,6 +175,9 @@ ssh <user>@pi-<name>.local pkill -f chromium
   sudo nmcli connection modify <SSID> connection.autoconnect yes
   sudo nmcli connection modify <SSID> 802-11-wireless.powersave 2
   ```
+  The `powersave 2` (off) command is worth running preemptively on every
+  fresh Pi — flaky Wi-Fi causes mDNS drops and intermittent HTTP timeouts
+  that look like Crema bugs but aren't.
 - **PWA caching on iOS** — after a UI update, the installed PWA may serve
   stale HTML until you fully close it from the app switcher and reopen, or
   remove and reinstall the home-screen icon.
@@ -164,16 +185,17 @@ ssh <user>@pi-<name>.local pkill -f chromium
 ## Repo layout
 
 ```
-server.js              Express + Socket.IO + mDNS + replies + pending tracking
+server.js              Express + Socket.IO + mDNS + replies + shortcuts + health
 public/
   index.html           PWA sender (target / message / response options / TTL)
-  settings.html        PWA quick-replies editor
-  display.html         Pi kiosk display (clock, message, replies, progress, notif)
+  settings.html        PWA Préférences (replies + shortcuts editor)
+  display.html         Pi kiosk display (clock, message, replies, shortcuts, notif)
   manifest.json        PWA manifest
   service-worker.js    minimal SW to enable PWA install
   icon.svg
 data/                  per-Pi runtime state (gitignored)
   replies.json         configured quick replies
+  shortcuts.json       configured touch shortcuts
 start.sh               wraps `node server.js` with nvm sourcing
 start-display.sh       Chromium kiosk launcher with restart loop
 install-pi.sh          one-shot Pi setup (systemd + autostart + emoji + blanking)
