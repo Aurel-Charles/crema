@@ -1,0 +1,19 @@
+{
+  "name": "Crema",
+  "short_name": "Crema",
+  "description": "Pi messenger — envoyer un message sur l'écran de la maison",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1410",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
