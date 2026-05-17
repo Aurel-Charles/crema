@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import mdns from 'mdns';
+import { lookup as dnsLookup } from 'dns/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { hostname } from 'os';
@@ -90,8 +91,17 @@ function findPeerByInstanceId(id) {
   return null;
 }
 
-function pickAddress(service) {
+function pickHost(service) {
   return service.host?.replace(/\.$/, '') ?? null;
+}
+
+async function resolveHost(host) {
+  try {
+    const { address } = await dnsLookup(host, { family: 4 });
+    return address;
+  } catch {
+    return host;
+  }
 }
 
 const advertisement = mdns.createAdvertisement(
@@ -112,18 +122,25 @@ const browser = mdns.createBrowser(mdns.tcp(SERVICE_TYPE), {
   resolverSequence: [mdns.rst.DNSServiceResolve()],
 });
 
-browser.on('serviceUp', (service) => {
+browser.on('serviceUp', async (service) => {
   const txt = service.txtRecord ?? {};
   if (!txt.instanceId) return;
   if (txt.instanceId === INSTANCE_ID) return;
+  const host = pickHost(service);
+  if (!host) return;
+  const address = await resolveHost(host);
   const peer = {
     instanceId: txt.instanceId,
     owner: txt.owner ?? '?',
-    address: pickAddress(service),
+    host,
+    address,
     port: service.port,
   };
+  const existing = peerMap.get(service.name);
   peerMap.set(service.name, peer);
-  console.log(`[mDNS] up: ${peer.owner} @ ${peer.address}:${peer.port}`);
+  if (!existing || existing.address !== address) {
+    console.log(`[mDNS] up: ${peer.owner} @ ${address}:${peer.port}`);
+  }
 });
 
 browser.on('serviceDown', (service) => {
