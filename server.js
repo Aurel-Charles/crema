@@ -454,6 +454,7 @@ browser.on('serviceUp', async (service) => {
   for (const [name, p] of peerMap) {
     if (p.owner === peer.owner && p.instanceId !== peer.instanceId) {
       peerMap.delete(name);
+      peerFailures.delete(name);
       console.log(`[mDNS] stale dropped: ${p.owner} (${p.instanceId.slice(0, 8)})`);
       io.emit('peer:down', { instanceId: p.instanceId });
     }
@@ -461,6 +462,7 @@ browser.on('serviceUp', async (service) => {
 
   const existing = peerMap.get(service.name);
   peerMap.set(service.name, peer);
+  peerFailures.set(service.name, 0);
   if (!existing) {
     console.log(`[mDNS] up: ${peer.owner} @ ${address}:${peer.port}`);
     io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner });
@@ -473,10 +475,51 @@ browser.on('serviceDown', (service) => {
   const peer = peerMap.get(service.name);
   if (peer) {
     peerMap.delete(service.name);
+    peerFailures.delete(service.name);
     console.log(`[mDNS] down: ${peer.owner}`);
     io.emit('peer:down', { instanceId: peer.instanceId });
   }
 });
+
+// Active health check — mDNS "bye" packets are unreliable (lost when a peer
+// reboots or loses power), so we ping each peer's /me every 10 s and drop
+// it after 3 consecutive failures. Also catches instanceId rotation (peer
+// restarted with a new UUID before mDNS noticed).
+const HEALTH_CHECK_INTERVAL_MS = 10_000;
+const HEALTH_CHECK_TIMEOUT_MS = 3_000;
+const HEALTH_MAX_FAILURES = 3;
+const peerFailures = new Map(); // service.name -> consecutive failure count
+
+async function pingPeer(peer) {
+  const r = await fetch(`http://${peer.address}:${peer.port}/me`, {
+    signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const data = await r.json().catch(() => ({}));
+  if (data.instanceId && data.instanceId !== peer.instanceId) {
+    throw new Error('instanceId rotated');
+  }
+}
+
+async function runHealthCheck() {
+  for (const [name, peer] of [...peerMap.entries()]) {
+    try {
+      await pingPeer(peer);
+      peerFailures.set(name, 0);
+    } catch (err) {
+      const failures = (peerFailures.get(name) ?? 0) + 1;
+      peerFailures.set(name, failures);
+      if (failures >= HEALTH_MAX_FAILURES) {
+        console.log(`[health] dropped ${peer.owner} after ${failures} failed pings (${err.message})`);
+        peerMap.delete(name);
+        peerFailures.delete(name);
+        io.emit('peer:down', { instanceId: peer.instanceId });
+      }
+    }
+  }
+}
+
+setInterval(runHealthCheck, HEALTH_CHECK_INTERVAL_MS);
 
 browser.on('error', (err) => console.error('[mDNS browse]', err.message));
 browser.start();
