@@ -170,6 +170,18 @@ browser.on('serviceUp', async (service) => {
     address,
     port: service.port,
   };
+
+  // Same-owner dedup: a new instance announcing means the previous one is dead,
+  // even if avahi hasn't sent its serviceDown yet. Assumes 1 Pi per owner (true
+  // in V2; revisit when we add room labels for multi-Pi-per-owner setups).
+  for (const [name, p] of peerMap) {
+    if (p.owner === peer.owner && p.instanceId !== peer.instanceId) {
+      peerMap.delete(name);
+      console.log(`[mDNS] stale dropped: ${p.owner} (${p.instanceId.slice(0, 8)})`);
+      io.emit('peer:down', { instanceId: p.instanceId });
+    }
+  }
+
   const existing = peerMap.get(service.name);
   peerMap.set(service.name, peer);
   if (!existing) {
@@ -200,7 +212,10 @@ function shutdown() {
   console.log('\nArrêt…');
   try { browser.stop(); } catch {}
   try { advertisement.stop(); } catch {}
-  setTimeout(() => process.exit(0), 300).unref();
+  // 2s grace to let the mDNS "bye" packet reach peers, so they don't keep us
+  // in their peerMap until avahi's ~2 min TTL expires. systemd's default
+  // TimeoutStopSec is 90s, so this is well within budget.
+  setTimeout(() => process.exit(0), 2000).unref();
 }
 
 process.on('SIGINT', shutdown);
