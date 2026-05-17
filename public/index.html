@@ -65,7 +65,7 @@
       display: flex;
       flex-direction: column;
       padding: 20px;
-      gap: 14px;
+      gap: 16px;
     }
 
     label {
@@ -74,6 +74,13 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
       color: #6b6b70;
+    }
+    label .optional {
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      color: #b8b8bd;
+      margin-left: 4px;
     }
 
     .field {
@@ -101,8 +108,7 @@
       padding-right: 40px;
     }
     textarea {
-      flex: 1;
-      min-height: 140px;
+      min-height: 110px;
       resize: none;
       padding: 16px;
       font-size: 18px;
@@ -113,7 +119,117 @@
     }
     select:disabled, textarea:disabled { opacity: 0.5; }
 
-    button {
+    /* Chips (response options) */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 4px 6px 12px;
+      background: #ebe7df;
+      color: #1a1410;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 999px;
+    }
+    .chip button {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      font-size: 14px;
+      line-height: 1;
+      color: #6b6b70;
+      background: transparent;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .chip button:active { background: #d6d2c8; }
+
+    .chip-add {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .chip-add input {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 15px;
+      border: 1px solid #e2e2e6;
+      border-radius: 12px;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .chip-add input:focus {
+      border-color: #f4a65a;
+      box-shadow: 0 0 0 3px rgba(244,166,90,0.2);
+    }
+    .chip-add button {
+      width: 44px;
+      padding: 0;
+      font-size: 18px;
+      color: #1a1410;
+      background: #fff;
+      border: 1px solid #e2e2e6;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .chip-add button:active { background: #ebe7df; }
+    .chip-add button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* TTL presets */
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .preset {
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #1a1410;
+      background: #fff;
+      border: 1px solid #e2e2e6;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .preset.active {
+      background: rgba(244,166,90,0.15);
+      border-color: #f4a65a;
+    }
+    .preset:active { transform: scale(0.97); }
+
+    .custom-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      font-size: 14px;
+      color: #6b6b70;
+    }
+    .custom-row[hidden] { display: none; }
+    .custom-row input {
+      width: 80px;
+      padding: 8px 12px;
+      font-size: 15px;
+      font-family: inherit;
+      border: 1px solid #e2e2e6;
+      border-radius: 10px;
+      background: #fff;
+      outline: none;
+    }
+    .custom-row input:focus {
+      border-color: #f4a65a;
+      box-shadow: 0 0 0 3px rgba(244,166,90,0.2);
+    }
+
+    .send-btn {
       padding: 16px;
       font-size: 17px;
       font-weight: 600;
@@ -124,9 +240,10 @@
       border-radius: 14px;
       cursor: pointer;
       transition: opacity 0.15s, transform 0.05s;
+      margin-top: auto;
     }
-    button:active { transform: scale(0.98); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .send-btn:active { transform: scale(0.98); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .status {
       min-height: 20px;
@@ -136,13 +253,6 @@
     }
     .status.ok { color: #2d7a3a; }
     .status.err { color: #b3261e; }
-
-    .hint {
-      font-size: 13px;
-      color: #6b6b70;
-      text-align: center;
-      margin-top: 4px;
-    }
   </style>
 </head>
 <body>
@@ -167,13 +277,37 @@
       </select>
     </div>
 
-    <div class="field" style="flex: 1;">
+    <div class="field">
       <label for="text">Message</label>
       <textarea id="text" placeholder="Ton message…" autocomplete="off" required></textarea>
     </div>
 
+    <div class="field">
+      <label>Options de réponse <span class="optional">(facultatif)</span></label>
+      <div class="chips" id="chips"></div>
+      <div class="chip-add">
+        <input id="chip-input" type="text" placeholder="Ex: Oui" maxlength="30" />
+        <button type="button" id="chip-add-btn" aria-label="Ajouter">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Disponible</label>
+      <div class="presets" id="presets">
+        <button type="button" class="preset" data-preset="30s">30 s</button>
+        <button type="button" class="preset" data-preset="5min">5 min</button>
+        <button type="button" class="preset" data-preset="1h">1 h</button>
+        <button type="button" class="preset" data-preset="evening">Ce soir</button>
+        <button type="button" class="preset" data-preset="custom">Perso…</button>
+      </div>
+      <div class="custom-row" id="custom-row" hidden>
+        <input id="custom-mins" type="number" min="1" max="1440" value="10" />
+        <span>minutes</span>
+      </div>
+    </div>
+
     <div class="status" id="status"></div>
-    <button type="submit" id="send" disabled>Envoyer</button>
+    <button type="submit" class="send-btn" id="send" disabled>Envoyer</button>
   </form>
 
   <script>
@@ -181,12 +315,115 @@
       navigator.serviceWorker.register('/service-worker.js').catch(() => {});
     }
 
+    const MAX_OPTIONS = 5;
     const meLabel = document.getElementById('me-label');
     const targetSel = document.getElementById('target');
     const textEl = document.getElementById('text');
-    const btn = document.getElementById('send');
+    const sendBtn = document.getElementById('send');
     const status = document.getElementById('status');
+    const chipsEl = document.getElementById('chips');
+    const chipInput = document.getElementById('chip-input');
+    const chipAddBtn = document.getElementById('chip-add-btn');
+    const presetsEl = document.getElementById('presets');
+    const customRow = document.getElementById('custom-row');
+    const customMins = document.getElementById('custom-mins');
 
+    // ===== State =====
+    let options = [];                 // string[]
+    let selectedPreset = '5min';      // default for plain messages
+    let ttlManuallySet = false;       // true once user clicks a preset
+    let peers = [];
+
+    // ===== Helpers =====
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    function computeTtlMs(preset) {
+      if (preset === '30s') return 30_000;
+      if (preset === '5min') return 5 * 60_000;
+      if (preset === '1h') return 60 * 60_000;
+      if (preset === 'evening') {
+        const now = new Date();
+        const tonight = new Date(now);
+        tonight.setHours(22, 0, 0, 0);
+        if (tonight <= now) tonight.setDate(tonight.getDate() + 1);
+        return tonight - now;
+      }
+      if (preset === 'custom') {
+        const m = Number(customMins.value);
+        return (Number.isFinite(m) && m > 0 ? m : 10) * 60_000;
+      }
+      return 5 * 60_000;
+    }
+
+    // ===== Rendering =====
+    function renderChips() {
+      chipsEl.innerHTML = options
+        .map((label, i) => `
+          <span class="chip">
+            ${escapeHtml(label)}
+            <button type="button" data-i="${i}" aria-label="Retirer">×</button>
+          </span>
+        `)
+        .join('');
+      chipAddBtn.disabled = options.length >= MAX_OPTIONS;
+      chipInput.disabled = options.length >= MAX_OPTIONS;
+    }
+
+    function renderPresets() {
+      for (const b of presetsEl.children) {
+        b.classList.toggle('active', b.dataset.preset === selectedPreset);
+      }
+      customRow.hidden = selectedPreset !== 'custom';
+    }
+
+    // Auto-pick smart default until user manually overrides
+    function applySmartTtlDefault() {
+      if (ttlManuallySet) return;
+      selectedPreset = options.length > 0 ? '1h' : '5min';
+      renderPresets();
+    }
+
+    // ===== Events =====
+    chipAddBtn.addEventListener('click', () => {
+      const label = chipInput.value.trim();
+      if (!label || options.length >= MAX_OPTIONS) return;
+      if (options.includes(label)) { chipInput.value = ''; return; }
+      options.push(label);
+      chipInput.value = '';
+      renderChips();
+      applySmartTtlDefault();
+    });
+
+    chipInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        chipAddBtn.click();
+      }
+    });
+
+    chipsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-i]');
+      if (!btn) return;
+      const i = Number(btn.dataset.i);
+      options.splice(i, 1);
+      renderChips();
+      applySmartTtlDefault();
+    });
+
+    presetsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.preset');
+      if (!btn) return;
+      selectedPreset = btn.dataset.preset;
+      ttlManuallySet = true;
+      renderPresets();
+      if (selectedPreset === 'custom') customMins.focus();
+    });
+
+    // ===== Network =====
     async function loadMe() {
       try {
         const r = await fetch('/me');
@@ -200,36 +437,38 @@
     async function loadPeers() {
       try {
         const r = await fetch('/peers');
-        const peers = await r.json();
+        peers = await r.json();
         const prev = targetSel.value;
         if (peers.length === 0) {
           targetSel.innerHTML = '<option value="">Aucun destinataire</option>';
-          btn.disabled = true;
+          sendBtn.disabled = true;
         } else {
           targetSel.innerHTML = peers
-            .map((p) => `<option value="${p.instanceId}">${p.owner}</option>`)
+            .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(p.owner)}</option>`)
             .join('');
           if (peers.find((p) => p.instanceId === prev)) targetSel.value = prev;
-          btn.disabled = false;
+          sendBtn.disabled = false;
         }
       } catch {
         targetSel.innerHTML = '<option value="">Erreur réseau</option>';
-        btn.disabled = true;
+        sendBtn.disabled = true;
       }
     }
 
-    loadMe();
-    loadPeers();
-    setInterval(loadPeers, 5000);
-
-    const form = document.getElementById('form');
-    form.addEventListener('submit', async (e) => {
+    document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const text = textEl.value.trim();
       const target = targetSel.value;
       if (!text || !target) return;
 
-      btn.disabled = true;
+      const payload = {
+        text,
+        target,
+        ttlMs: computeTtlMs(selectedPreset),
+        responseOptions: options,
+      };
+
+      sendBtn.disabled = true;
       status.textContent = 'Envoi…';
       status.className = 'status';
 
@@ -237,21 +476,34 @@
         const res = await fetch('/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, target }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Échec');
         status.textContent = 'Envoyé';
         status.className = 'status ok';
+        // Reset for next message
         textEl.value = '';
+        options = [];
+        ttlManuallySet = false;
+        selectedPreset = '5min';
+        renderChips();
+        renderPresets();
       } catch (err) {
         status.textContent = err.message || 'Erreur';
         status.className = 'status err';
       } finally {
-        btn.disabled = false;
+        sendBtn.disabled = false;
         setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2500);
       }
     });
+
+    // ===== Init =====
+    renderChips();
+    renderPresets();
+    loadMe();
+    loadPeers();
+    setInterval(loadPeers, 5000);
   </script>
 </body>
 </html>

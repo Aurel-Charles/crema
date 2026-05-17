@@ -66,6 +66,26 @@
     }
     .presence .name { color: var(--text); font-weight: 600; }
 
+    #notif {
+      position: absolute;
+      top: 24px;
+      left: 28px;
+      max-width: 45vw;
+      padding: 10px 14px;
+      font-size: clamp(13px, 1.4vw, 16px);
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 12px;
+      opacity: 0;
+      transform: translateX(-12px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+    }
+    #notif.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
     #screen {
       max-width: 90vw;
       text-align: center;
@@ -95,7 +115,14 @@
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: var(--muted);
-      margin-bottom: 24px;
+    }
+    .msg .subtitle {
+      font-size: clamp(12px, 1.2vw, 14px);
+      color: var(--muted);
+      opacity: 0.75;
+      margin-top: 4px;
+      margin-bottom: 22px;
+      font-variant-numeric: tabular-nums;
     }
     .msg .text {
       font-size: clamp(38px, 6vw, 64px);
@@ -146,6 +173,23 @@
       border-color: #c45a45;
       color: #c45a45;
     }
+
+    .progress {
+      margin: 32px auto 0;
+      width: clamp(200px, 38vw, 360px);
+      height: 3px;
+      background: rgba(244, 166, 90, 0.12);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      width: 100%;
+      height: 100%;
+      background: var(--accent);
+      transform-origin: left center;
+      transform: scaleX(1);
+      opacity: 0.7;
+    }
   </style>
 </head>
 <body class="night">
@@ -153,16 +197,21 @@
     <div id="presence-list"></div>
   </header>
 
+  <div id="notif"></div>
+
   <main id="screen"></main>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // ===== State =====
+    // ===== Elements =====
     const screen = document.getElementById('screen');
     const presenceList = document.getElementById('presence-list');
+    const notifEl = document.getElementById('notif');
 
-    const MESSAGE_TTL_MS = 30_000;
+    const DEFAULT_DISPLAY_MS = 30_000;
+    const MIN_DISPLAY_MS = 2_000;
     const REPLY_RETURN_DELAY_MS = 1_500;
+    const NOTIF_VISIBLE_MS = 10_000;
 
     const dateFmt = new Intl.DateTimeFormat('fr-FR', {
       weekday: 'long', day: 'numeric', month: 'long',
@@ -171,11 +220,40 @@
       hour: '2-digit', minute: '2-digit', hour12: false,
     });
 
+    // ===== State =====
     let mode = 'idle';
     let resetTimer = null;
-    let currentMsg = null;     // full message data while displaying a message
-    let replies = [];          // configured quick replies
-    const peers = new Map();   // instanceId -> owner
+    let notifTimer = null;
+    let currentMsg = null;
+    let replies = [];
+    const peers = new Map();
+
+    // ===== Time formatting =====
+    function formatAgo(ms) {
+      const s = Math.max(0, Math.floor(ms / 1000));
+      if (s < 60) return `il y a ${s} s`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `il y a ${m} min`;
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      return `il y a ${h} h${rem > 0 ? ` ${rem} min` : ''}`;
+    }
+    function formatRemaining(ms) {
+      if (ms <= 0) return 'expiré';
+      const s = Math.ceil(ms / 1000);
+      if (s < 60) return `encore ${s} s`;
+      const m = Math.ceil(s / 60);
+      if (m < 60) return `encore ${m} min`;
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      return `encore ${h} h${rem > 0 ? ` ${rem} min` : ''}`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
 
     // ===== Render =====
     function renderIdle() {
@@ -190,35 +268,81 @@
     function showIdle() {
       mode = 'idle';
       currentMsg = null;
+      if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
       renderIdle();
     }
 
     function showMessage(data) {
       mode = 'message';
-      currentMsg = data;
+      const receivedAt = Date.now();
+      const expiresAtMs = data.expiresAt ? Date.parse(data.expiresAt) : null;
+      currentMsg = { ...data, receivedAt, expiresAtMs };
       renderMessage();
+
       if (resetTimer) clearTimeout(resetTimer);
-      resetTimer = setTimeout(showIdle, MESSAGE_TTL_MS);
+      const ttl = expiresAtMs
+        ? Math.max(MIN_DISPLAY_MS, expiresAtMs - Date.now())
+        : DEFAULT_DISPLAY_MS;
+      resetTimer = setTimeout(showIdle, ttl);
+
+      if (expiresAtMs) startProgressAnimation(ttl);
     }
 
     function renderMessage() {
       if (!currentMsg) return;
       const { text, from, isReply } = currentMsg;
       const fromLabel = from ? `<div class="from">${escapeHtml(from)}</div>` : '';
+      const subtitle = `<div class="subtitle">${buildSubtitle()}</div>`;
       const prefix = isReply ? '<span class="reply-prefix">↩</span>' : '';
+      const progress = currentMsg.expiresAtMs
+        ? '<div class="progress"><div class="progress-fill"></div></div>'
+        : '';
       screen.className = 'msg';
-      screen.innerHTML = `${fromLabel}<div class="text">${prefix}${escapeHtml(text)}</div>${replyBarHtml()}`;
+      screen.innerHTML = `${fromLabel}${subtitle}<div class="text">${prefix}${escapeHtml(text)}</div>${replyBarHtml()}${progress}`;
+    }
+
+    function buildSubtitle() {
+      if (!currentMsg) return '';
+      const ago = formatAgo(Date.now() - currentMsg.receivedAt);
+      if (currentMsg.expiresAtMs) {
+        return `${ago} · ${formatRemaining(currentMsg.expiresAtMs - Date.now())}`;
+      }
+      return ago;
+    }
+
+    function refreshSubtitleInPlace() {
+      if (mode !== 'message') return;
+      const sub = screen.querySelector('.subtitle');
+      if (sub) sub.textContent = buildSubtitle();
+    }
+
+    function activeReplyItems() {
+      if (!currentMsg) return [];
+      const opts = currentMsg.responseOptions;
+      return (opts && opts.length > 0) ? opts : replies;
     }
 
     function replyBarHtml() {
       if (!currentMsg) return '';
       const { fromInstanceId, isReply } = currentMsg;
-      const canReply = !isReply && fromInstanceId && replies.length > 0;
-      if (!canReply) return '';
-      const buttons = replies
+      if (isReply || !fromInstanceId) return '';
+      const items = activeReplyItems();
+      if (items.length === 0) return '';
+      const buttons = items
         .map((r, i) => `<button class="reply-btn" data-i="${i}">${escapeHtml(r.label)}</button>`)
         .join('');
       return `<div class="reply-bar">${buttons}</div>`;
+    }
+
+    function startProgressAnimation(durationMs) {
+      const fill = screen.querySelector('.progress-fill');
+      if (!fill) return;
+      // Reset to full, force reflow, then animate to empty over the TTL.
+      fill.style.transition = 'none';
+      fill.style.transform = 'scaleX(1)';
+      void fill.offsetHeight;
+      fill.style.transition = `transform ${durationMs}ms linear`;
+      fill.style.transform = 'scaleX(0)';
     }
 
     function renderPresence() {
@@ -238,10 +362,11 @@
       presenceList.innerHTML = rows.join('');
     }
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, (c) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-      }[c]));
+    function showNotif(text) {
+      notifEl.textContent = text;
+      notifEl.classList.add('visible');
+      if (notifTimer) clearTimeout(notifTimer);
+      notifTimer = setTimeout(() => notifEl.classList.remove('visible'), NOTIF_VISIBLE_MS);
     }
 
     // ===== Reply handling =====
@@ -249,7 +374,8 @@
       const btn = e.target.closest('.reply-btn');
       if (!btn || btn.disabled || !currentMsg?.fromInstanceId) return;
       const idx = Number(btn.dataset.i);
-      const reply = replies[idx];
+      const items = activeReplyItems();
+      const reply = items[idx];
       if (!reply) return;
 
       const allBtns = screen.querySelectorAll('.reply-btn');
@@ -259,7 +385,11 @@
         const r = await fetch('/reply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: currentMsg.fromInstanceId, label: reply.label }),
+          body: JSON.stringify({
+            to: currentMsg.fromInstanceId,
+            label: reply.label,
+            replyToMsgId: currentMsg.id || null,
+          }),
         });
         if (!r.ok) throw new Error('send failed');
         btn.classList.add('sent');
@@ -277,13 +407,22 @@
       }
     });
 
-    // ===== Clock tick =====
+    // ===== Clock + subtitle tick =====
     showIdle();
-    const msToNextMinute = 60_000 - (Date.now() % 60_000);
+    const msToNextSecond = 1_000 - (Date.now() % 1_000);
     setTimeout(() => {
-      if (mode === 'idle') renderIdle();
-      setInterval(() => { if (mode === 'idle') renderIdle(); }, 60_000);
-    }, msToNextMinute);
+      tickEverySecond();
+      setInterval(tickEverySecond, 1_000);
+    }, msToNextSecond);
+
+    function tickEverySecond() {
+      if (mode === 'idle') {
+        // Only re-render the clock when the minute rolls over.
+        if (Date.now() % 60_000 < 1_000) renderIdle();
+      } else if (mode === 'message') {
+        refreshSubtitleInPlace();
+      }
+    }
 
     // ===== Day/night theme =====
     let schedule = null;
@@ -357,6 +496,11 @@
       if (data && typeof data.text === 'string' && data.text.trim()) {
         showMessage(data);
       }
+    });
+
+    socket.on('msg:expired', ({ text, targetOwner }) => {
+      const truncated = text.length > 40 ? text.slice(0, 40) + '…' : text;
+      showNotif(`« ${truncated} » sans réponse de ${targetOwner}`);
     });
   </script>
 </body>

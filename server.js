@@ -29,6 +29,10 @@ const MAX_REPLIES = 5;
 const MAX_LABEL_LENGTH = 30;
 const DEFAULT_REPLIES = [{ label: '👍' }, { label: 'Vu' }, { label: 'Plus tard' }];
 
+// V4 TTL bounds — keep generous on both ends.
+const MIN_TTL_MS = 5_000;            // 5 s
+const MAX_TTL_MS = 24 * 3600 * 1000; // 24 h
+
 function deriveOwnerFromHostname() {
   const h = hostname().replace(/\.local$/, '');
   const stripped = h.startsWith('pi-') ? h.slice(3) : h;
@@ -135,6 +139,7 @@ app.put('/replies', async (req, res) => {
 app.post('/reply', async (req, res) => {
   const to = typeof req.body?.to === 'string' ? req.body.to : '';
   const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
+  const replyToMsgId = typeof req.body?.replyToMsgId === 'string' ? req.body.replyToMsgId : null;
   if (!to) return res.status(400).json({ error: 'Destinataire manquant' });
   if (!label) return res.status(400).json({ error: 'Réponse vide' });
 
@@ -146,6 +151,7 @@ app.post('/reply', async (req, res) => {
     from: OWNER,
     fromInstanceId: INSTANCE_ID,
     isReply: true,
+    replyToMsgId,
   };
 
   try {
@@ -175,6 +181,56 @@ async function postInbox(address, port, payload) {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
+function sanitizeResponseOptions(input) {
+  if (!Array.isArray(input)) return [];
+  const cleaned = [];
+  const seen = new Set();
+  for (const item of input) {
+    const label = typeof item === 'string'
+      ? item.trim()
+      : (typeof item?.label === 'string' ? item.label.trim() : '');
+    if (!label) continue;
+    if (label.length > MAX_LABEL_LENGTH) continue;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    cleaned.push({ label });
+    if (cleaned.length >= MAX_REPLIES) break;
+  }
+  return cleaned;
+}
+
+function clampTtl(ttl) {
+  const n = Number(ttl);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(MIN_TTL_MS, Math.min(MAX_TTL_MS, n));
+}
+
+// ===== Sender-side pending tracking (V4) =====
+// When /send succeeds, the message is kept in this map until either:
+//   - the peer replies (we get a /inbox hit with replyToMsgId), or
+//   - the TTL elapses (we emit msg:expired to our own display).
+const pendingMessages = new Map(); // msgId -> { text, targetOwner, expiresAt, timer }
+
+function trackPending({ id, text, targetOwner, expiresAt }) {
+  const ttl = expiresAt - Date.now();
+  const timer = setTimeout(() => {
+    const entry = pendingMessages.get(id);
+    if (!entry) return;
+    pendingMessages.delete(id);
+    console.log(`[pending] expired without reply → ${targetOwner}: ${text.slice(0, 30)}`);
+    io.emit('msg:expired', { id, text, targetOwner });
+  }, Math.max(0, ttl));
+  pendingMessages.set(id, { text, targetOwner, expiresAt, timer });
+}
+
+function resolvePending(id) {
+  const entry = pendingMessages.get(id);
+  if (!entry) return false;
+  clearTimeout(entry.timer);
+  pendingMessages.delete(id);
+  return true;
+}
+
 app.post('/send', async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const target = typeof req.body?.target === 'string' ? req.body.target : '';
@@ -184,18 +240,33 @@ app.post('/send', async (req, res) => {
   const peer = findPeerByInstanceId(target);
   if (!peer) return res.status(404).json({ error: 'Destinataire introuvable' });
 
-  const payload = { text, from: OWNER, fromInstanceId: INSTANCE_ID };
+  const responseOptions = sanitizeResponseOptions(req.body?.responseOptions);
+  const defaultTtl = responseOptions.length > 0 ? 3600_000 : 300_000;
+  const ttlMs = clampTtl(req.body?.ttlMs) ?? defaultTtl;
+  const id = randomUUID();
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+  const payload = {
+    id,
+    text,
+    from: OWNER,
+    fromInstanceId: INSTANCE_ID,
+    expiresAt,
+    responseOptions: responseOptions.length > 0 ? responseOptions : null,
+  };
 
   try {
     await postInbox(peer.address, peer.port, payload);
-    return res.json({ ok: true });
+    trackPending({ id, text, targetOwner: peer.owner, expiresAt: Date.parse(expiresAt) });
+    return res.json({ ok: true, id, expiresAt });
   } catch (err1) {
     console.warn(`[send] retry → ${peer.owner} (${err1.message})`);
     try {
       const fresh = await resolveHost(peer.host);
       peer.address = fresh;
       await postInbox(fresh, peer.port, payload);
-      return res.json({ ok: true });
+      trackPending({ id, text, targetOwner: peer.owner, expiresAt: Date.parse(expiresAt) });
+      return res.json({ ok: true, id, expiresAt });
     } catch (err2) {
       console.error(`[send] failed → ${peer.owner}:`, err2.message);
       return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
@@ -208,8 +279,24 @@ app.post('/inbox', (req, res) => {
   const from = typeof req.body?.from === 'string' ? req.body.from.trim() : 'Inconnu';
   const fromInstanceId = typeof req.body?.fromInstanceId === 'string' ? req.body.fromInstanceId : null;
   const isReply = req.body?.isReply === true;
+  const id = typeof req.body?.id === 'string' ? req.body.id : null;
+  const expiresAt = typeof req.body?.expiresAt === 'string' ? req.body.expiresAt : null;
+  const replyToMsgId = typeof req.body?.replyToMsgId === 'string' ? req.body.replyToMsgId : null;
+  const responseOptions = sanitizeResponseOptions(req.body?.responseOptions);
   if (!text) return res.status(400).json({ error: 'Message vide' });
-  io.emit('message', { text, from, fromInstanceId, isReply });
+
+  // If this is a reply to one of our own pending messages, clear its expiry timer.
+  if (isReply && replyToMsgId) resolvePending(replyToMsgId);
+
+  io.emit('message', {
+    id,
+    text,
+    from,
+    fromInstanceId,
+    isReply,
+    expiresAt,
+    responseOptions: responseOptions.length > 0 ? responseOptions : null,
+  });
   res.json({ ok: true });
 });
 
@@ -312,7 +399,7 @@ browser.start();
 await loadReplies();
 
 httpServer.listen(PORT, () => {
-  console.log(`Crema V3 — ${OWNER} on http://localhost:${PORT}`);
+  console.log(`Crema V4 — ${OWNER} on http://localhost:${PORT}`);
 });
 
 function shutdown() {
