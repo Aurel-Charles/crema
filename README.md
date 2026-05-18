@@ -9,7 +9,7 @@ in idle as an ambient amber clock with day/night theming, shows who else is
 online on the LAN, and exposes its configured shortcuts at the bottom of the
 screen.
 
-**Current version:** [v5.0.1](https://github.com/Aurel-Charles/crema/releases/tag/v5.0.1)
+**Current version:** [v5.1.0](https://github.com/Aurel-Charles/crema/releases/tag/v5.1.0)
 — see [CLAUDE.md](./CLAUDE.md) for the full project spec and roadmap.
 
 ## What works today
@@ -47,6 +47,25 @@ screen.
   message to its assigned peer with its own TTL. Greyed out when the target
   peer is offline. Configured per Pi via the same `/settings` page (now
   "Préférences" with a Raccourcis section).
+- **Reply context (V5.1)** — incoming replies show the original question as
+  an italic caption above the reply, so you remember what you asked. Replies
+  also auto-clear after 10 s instead of the 30 s default, since they're
+  typically short acks.
+- **Tap-to-dismiss (V5.1)** — tap anywhere on the screen (outside the reply
+  buttons) to clear the current message and return to idle without waiting
+  for the TTL.
+- **Do Not Disturb (V5.1)** — toggle from the Pi (tap the moon icon
+  top-right) or from `/settings` in the PWA. State is persisted server-side
+  and broadcast in real time so the display and any open settings page stay
+  in sync. While DND is on, incoming messages don't take over the screen;
+  they stack into a queue with a brief notif preview and a count badge on
+  the moon. Turning DND off drains the queue oldest-first, with a 600 ms
+  breath between each.
+- **Message queue (V5.1)** — if a message arrives while another is on
+  screen (or during DND), it's held back instead of clobbering the current
+  one. Queue is capped at 5, oldest dropped on overflow. Queued messages
+  keep their actual arrival time so the `il y a Xmin` subtitle stays
+  honest when they finally surface.
 - **Send reliability** — retry with hostname re-resolution on transient
   avahi flakiness; stale peers dropped immediately when a new instance
   announces under the same owner; mDNS shutdown grace so the "bye" packet
@@ -81,7 +100,12 @@ Node.js 20, Express, Socket.IO, [`mdns`](https://github.com/agnat/node_mdns)
 Frontend is vanilla HTML/CSS/JS — no framework.
 
 Per-Pi runtime state lives in `data/` (gitignored): `replies.json` for the
-quick-reply config, `shortcuts.json` for the touch shortcuts.
+quick-reply config, `shortcuts.json` for the touch shortcuts, `dnd.json`
+for the Do Not Disturb flag.
+
+The server is split into focused modules (`config.js`, `peers.js`,
+`store.js`, `messaging.js`) wired together by a thin `server.js`
+entrypoint, to keep things tidy as the data model grows toward V6.
 
 ## Setting up a new Pi
 
@@ -185,17 +209,22 @@ ssh <user>@pi-<name>.local pkill -f chromium
 ## Repo layout
 
 ```
-server.js              Express + Socket.IO + mDNS + replies + shortcuts + health
+server.js              entrypoint: Express + Socket.IO, page routes, wiring, shutdown
+config.js              env, owner derivation, paths, TTL bounds, constants
+peers.js               mDNS advertise + browse, peer map, dedup, health check
+store.js               atomic JSON persistence for replies, shortcuts, DND + their routes
+messaging.js           pendingMessages, sendToPeer, /send /shortcut/send /reply /inbox
 public/
   index.html           PWA sender (target / message / response options / TTL)
-  settings.html        PWA Préférences (replies + shortcuts editor)
-  display.html         Pi kiosk display (clock, message, replies, shortcuts, notif)
+  settings.html        PWA Préférences (DND toggle + replies + shortcuts editor)
+  display.html         Pi kiosk (clock, message, queue, DND moon, replies, shortcuts)
   manifest.json        PWA manifest
   service-worker.js    minimal SW to enable PWA install
   icon.svg
 data/                  per-Pi runtime state (gitignored)
   replies.json         configured quick replies
   shortcuts.json       configured touch shortcuts
+  dnd.json             Do Not Disturb flag
 start.sh               wraps `node server.js` with nvm sourcing
 start-display.sh       Chromium kiosk launcher with restart loop
 install-pi.sh          one-shot Pi setup (systemd + autostart + emoji + blanking)

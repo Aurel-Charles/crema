@@ -1,7 +1,7 @@
 {
   "name": "crema",
-  "version": "0.5.0",
-  "description": "Pi messenger — V5 touch shortcuts on the Pi screen",
+  "version": "0.5.1",
+  "description": "Pi messenger — V5.1 DND mode + message queue + reply polish",
   "type": "module",
   "main": "server.js",
   "scripts": {
