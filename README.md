@@ -5,7 +5,7 @@ message from your phone (PWA) or with a one-tap shortcut on the Pi screen
 itself, and it surfaces on the recipient's Pi. Each message carries its own
 time-to-live that defines the sender's availability window; the recipient
 sees a live countdown and can fire back a tap-friendly reply. Each Pi sits
-in idle as an ambient amber clock with day/night theming, shows who else is
+in idle as an ambient sage clock with day/night theming, shows who else is
 online on the LAN, and exposes its configured shortcuts at the bottom of the
 screen.
 
@@ -107,6 +107,28 @@ to its own display. When the peer fires a reply via `/reply`, the payload
 includes `replyToMsgId`, which lets the original sender's server clear its
 expiry timer before the toast fires. Shortcut taps on the Pi go through
 `/shortcut/send` which reuses the same pipeline as the PWA path.
+
+## Design
+
+**Direction Sauge** — the visual system shared across PWA and display.
+
+- **Palette** in `public/theme.css` is the single source of truth. PWA
+  runs light (`#F6F8F4`); display runs dark warm-green (`#121711`). Both
+  share the sage accent `#A8C49C` — the "living color" reserved for the
+  primary action (PWA send button), the active state of TTL presets and
+  recipient buttons, the resting clock on the display, and the "sent"
+  state of reply buttons. Warm gold `#C9A86A` is reserved for the lone
+  `en attente` status badge in `/history`: scarcity is what earns it
+  visual weight.
+- **Typographic signature** — `.crema-label` (uppercase, 0.25em kerned)
+  marks every identity surface: section labels in the PWA send form,
+  day headers in `/history`, sender labels on the display, presence
+  names, and the date below the clock. Mono is reserved for per-message
+  direction marks — the `A → F` initials in `/history` and the peer
+  initials in the segmented recipient picker.
+- **Recipient picker** scales with peer count: a segmented control
+  (mono initial + name) for 1–4 peers, falling back to a `<select>`
+  beyond that.
 
 ## Tech stack
 
