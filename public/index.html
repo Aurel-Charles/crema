@@ -3,21 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#F6F8F4" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Crema" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/theme.css" />
   <title>Crema</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; height: 100%; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f7f7f8;
-      color: #1a1410;
+      background: var(--crema-bg);
+      color: var(--crema-text);
       display: flex;
       flex-direction: column;
       min-height: 100vh;
@@ -43,9 +44,9 @@
     }
     .me {
       font-size: 13px;
-      color: #6b6b70;
+      color: var(--crema-muted);
     }
-    .me strong { color: #1a1410; font-weight: 600; }
+    .me strong { color: var(--crema-text); font-weight: 600; }
     .header-actions {
       display: flex;
       align-items: center;
@@ -57,12 +58,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #6b6b70;
+      color: var(--crema-muted);
       text-decoration: none;
       border-radius: 12px;
       transition: background 0.15s, color 0.15s;
     }
-    .icon-link:active { background: #ebebef; color: #1a1410; }
+    .icon-link:active { background: var(--crema-stroke-faint); color: var(--crema-text); }
     .icon-link svg { width: 22px; height: 22px; }
 
     form {
@@ -78,13 +79,13 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #6b6b70;
+      color: var(--crema-muted);
     }
     label .optional {
       font-weight: 400;
       text-transform: none;
       letter-spacing: 0;
-      color: #b8b8bd;
+      color: var(--crema-muted);
       margin-left: 4px;
     }
 
@@ -97,9 +98,9 @@
     select, textarea {
       font-size: 17px;
       font-family: inherit;
-      border: 1px solid #e2e2e6;
+      border: 1px solid var(--crema-stroke);
       border-radius: 14px;
-      background: #fff;
+      background: var(--crema-surface);
       color: inherit;
       outline: none;
       transition: border-color 0.15s, box-shadow 0.15s;
@@ -121,8 +122,8 @@
       overflow-y: auto;
     }
     select:focus, textarea:focus {
-      border-color: #f4a65a;
-      box-shadow: 0 0 0 3px rgba(244, 166, 90, 0.2);
+      border-color: var(--crema-accent);
+      box-shadow: 0 0 0 3px rgba(168, 196, 156, 0.2);
     }
     select:disabled, textarea:disabled { opacity: 0.5; }
 
@@ -137,8 +138,8 @@
       align-items: center;
       gap: 4px;
       padding: 6px 4px 6px 12px;
-      background: #ebe7df;
-      color: #1a1410;
+      background: var(--crema-stroke-faint);
+      color: var(--crema-text);
       font-size: 14px;
       font-weight: 500;
       border-radius: 999px;
@@ -149,13 +150,13 @@
       padding: 0;
       font-size: 14px;
       line-height: 1;
-      color: #6b6b70;
+      color: var(--crema-muted);
       background: transparent;
       border: none;
       border-radius: 50%;
       cursor: pointer;
     }
-    .chip button:active { background: #d6d2c8; }
+    .chip button:active { background: var(--crema-stroke); }
 
     .chip-add {
       display: flex;
@@ -166,27 +167,27 @@
       flex: 1;
       padding: 10px 14px;
       font-size: 15px;
-      border: 1px solid #e2e2e6;
+      border: 1px solid var(--crema-stroke);
       border-radius: 12px;
-      background: #fff;
+      background: var(--crema-surface);
       outline: none;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
     .chip-add input:focus {
-      border-color: #f4a65a;
+      border-color: var(--crema-accent);
       box-shadow: 0 0 0 3px rgba(244,166,90,0.2);
     }
     .chip-add button {
       width: 44px;
       padding: 0;
       font-size: 18px;
-      color: #1a1410;
-      background: #fff;
-      border: 1px solid #e2e2e6;
+      color: var(--crema-text);
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
       border-radius: 12px;
       cursor: pointer;
     }
-    .chip-add button:active { background: #ebe7df; }
+    .chip-add button:active { background: var(--crema-stroke-faint); }
     .chip-add button:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* TTL presets */
@@ -199,16 +200,16 @@
       padding: 10px 14px;
       font-size: 14px;
       font-weight: 500;
-      color: #1a1410;
-      background: #fff;
-      border: 1px solid #e2e2e6;
+      color: var(--crema-text);
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
       border-radius: 12px;
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
     .preset.active {
       background: rgba(244,166,90,0.15);
-      border-color: #f4a65a;
+      border-color: var(--crema-accent);
     }
     .preset:active { transform: scale(0.97); }
 
@@ -218,7 +219,7 @@
       gap: 8px;
       margin-top: 6px;
       font-size: 14px;
-      color: #6b6b70;
+      color: var(--crema-muted);
     }
     .custom-row[hidden] { display: none; }
     .custom-row input {
@@ -226,13 +227,13 @@
       padding: 8px 12px;
       font-size: 15px;
       font-family: inherit;
-      border: 1px solid #e2e2e6;
+      border: 1px solid var(--crema-stroke);
       border-radius: 10px;
-      background: #fff;
+      background: var(--crema-surface);
       outline: none;
     }
     .custom-row input:focus {
-      border-color: #f4a65a;
+      border-color: var(--crema-accent);
       box-shadow: 0 0 0 3px rgba(244,166,90,0.2);
     }
 
@@ -241,8 +242,8 @@
       font-size: 17px;
       font-weight: 600;
       font-family: inherit;
-      color: #fff;
-      background: #1a1410;
+      color: var(--crema-surface);
+      background: var(--crema-text);
       border: none;
       border-radius: 14px;
       cursor: pointer;
@@ -256,10 +257,10 @@
       min-height: 20px;
       font-size: 14px;
       text-align: center;
-      color: #6b6b70;
+      color: var(--crema-muted);
     }
     .status.ok { color: #2d7a3a; }
-    .status.err { color: #b3261e; }
+    .status.err { color: var(--crema-danger); }
   </style>
 </head>
 <body>

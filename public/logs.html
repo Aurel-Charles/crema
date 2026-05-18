@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#F6F8F4" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Crema" />
@@ -11,13 +11,14 @@
   <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="apple-touch-icon" href="/icon.svg" />
   <title>Crema — Activité</title>
+  <link rel="stylesheet" href="/theme.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f7f7f8;
-      color: #1a1410;
+      background: var(--crema-bg);
+      color: var(--crema-text);
       min-height: 100vh;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
@@ -35,12 +36,12 @@
       align-items: center;
       justify-content: center;
       font-size: 22px;
-      color: #1a1410;
+      color: var(--crema-text);
       text-decoration: none;
       border-radius: 12px;
       transition: background 0.15s;
     }
-    .back:active { background: #ebebef; }
+    .back:active { background: var(--crema-stroke-faint); }
     h1 {
       margin: 0;
       font-size: 24px;
@@ -52,20 +53,20 @@
       position: sticky;
       top: 0;
       z-index: 10;
-      background: #f7f7f8;
+      background: var(--crema-bg);
       padding: 16px 20px 12px;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      border-bottom: 1px solid #ebebef;
+      border-bottom: 1px solid var(--crema-stroke-faint);
     }
     .chip {
       padding: 8px 14px;
       font-size: 13px;
       font-weight: 500;
-      color: #6b6b70;
-      background: #fff;
-      border: 1px solid #e2e2e6;
+      color: var(--crema-muted);
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
       border-radius: 999px;
       cursor: pointer;
       transition: all 0.15s;
@@ -73,9 +74,9 @@
     }
     .chip:active { transform: scale(0.96); }
     .chip.active {
-      background: #1a1410;
-      color: #fff;
-      border-color: #1a1410;
+      background: var(--crema-text);
+      color: var(--crema-surface);
+      border-color: var(--crema-text);
     }
 
     main {
@@ -91,16 +92,13 @@
     .day h2 {
       margin: 0 20px 8px;
       font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: #6b6b70;
+      color: var(--crema-muted);
     }
 
     .events {
-      background: #fff;
-      border-top: 1px solid #ebebef;
-      border-bottom: 1px solid #ebebef;
+      background: var(--crema-surface);
+      border-top: 1px solid var(--crema-stroke-faint);
+      border-bottom: 1px solid var(--crema-stroke-faint);
     }
 
     .event {
@@ -108,7 +106,7 @@
       align-items: baseline;
       gap: 10px;
       padding: 10px 20px;
-      border-bottom: 1px solid #f0f0f4;
+      border-bottom: 1px solid var(--crema-stroke-faint);
       font-size: 14px;
       line-height: 1.4;
     }
@@ -117,7 +115,7 @@
     .event .time {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
-      color: #b0b0b8;
+      color: var(--crema-muted);
       flex-shrink: 0;
       min-width: 62px;
     }
@@ -139,17 +137,17 @@
     }
 
     .cat-peer    { background: #e0ecf5; color: #2c5f8a; }
-    .cat-message { background: rgba(244, 166, 90, 0.22); color: #8a5a14; }
-    .cat-system  { background: #ebebef; color: #555; }
-    .cat-error   { background: #f7e6e1; color: #b3261e; }
+    .cat-message { background: rgba(168, 196, 156, 0.22); color: #8a5a14; }
+    .cat-system  { background: var(--crema-stroke-faint); color: var(--crema-muted); }
+    .cat-error   { background: var(--crema-danger-bg); color: var(--crema-danger); }
 
     .event.level-warn  .msg { color: #8a5a14; }
-    .event.level-error .msg { color: #b3261e; font-weight: 500; }
+    .event.level-error .msg { color: var(--crema-danger); font-weight: 500; }
 
     .empty, .loading {
       text-align: center;
       padding: 40px 20px;
-      color: #b0b0b8;
+      color: var(--crema-muted);
       font-size: 14px;
     }
 
@@ -161,14 +159,14 @@
       padding: 10px 18px;
       font-size: 13px;
       font-family: inherit;
-      color: #6b6b70;
+      color: var(--crema-muted);
       background: transparent;
-      border: 1px dashed #b8b8bd;
+      border: 1px dashed var(--crema-muted);
       border-radius: 10px;
       cursor: pointer;
       transition: background 0.15s;
     }
-    .cleanup:active { background: #ebebef; }
+    .cleanup:active { background: var(--crema-stroke-faint); }
     .cleanup:disabled { opacity: 0.4; cursor: not-allowed; }
   </style>
 </head>
@@ -270,7 +268,7 @@
       }
       mainEl.innerHTML = groups.map((g) => `
         <section class="day">
-          <h2>${esc(dayLabel(g.key))}</h2>
+          <h2 class="crema-label">${esc(dayLabel(g.key))}</h2>
           <div class="events">${g.items.map(renderEvent).join('')}</div>
         </section>
       `).join('');

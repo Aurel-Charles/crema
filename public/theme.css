@@ -1,0 +1,62 @@
+/* Crema — Direction Sauge
+ * Single source of truth for palette + signature label utility.
+ * PWA pages get the light defaults via :root.
+ * Display page overrides via .crema-display (with .day variant).
+ */
+
+:root {
+  /* PWA (light) — defaults */
+  --crema-bg:               #F6F8F4;
+  --crema-surface:          #FFFFFF;
+  --crema-text:             #121711;
+  --crema-muted:            #6E776A;
+  --crema-stroke:           #DCE2D7;
+  --crema-stroke-faint:     #E8EEE3;
+
+  /* Shared across both palettes */
+  --crema-accent:           #A8C49C;  /* sage — the living color */
+  --crema-accent-ink:       #0C100C;  /* readable on accent backgrounds */
+  --crema-attention:        #C9A86A;  /* warm gold — reserved for "pending" */
+  --crema-presence:         #A8C49C;  /* same as accent on purpose */
+
+  /* Semantic — only for destructive feedback / errors. Use sparingly. */
+  --crema-danger:           #B3261E;
+  --crema-danger-bg:        #F7E6E1;
+
+  /* Type stacks */
+  --crema-font-sans:        -apple-system, BlinkMacSystemFont, "Inter",
+                            "Segoe UI", Roboto, system-ui, sans-serif;
+  --crema-font-mono:        ui-monospace, SFMono-Regular, Menlo,
+                            Consolas, monospace;
+}
+
+/* Display (dark warm-green) — applied to body.crema-display on display.html */
+.crema-display,
+.crema-display.night {
+  --crema-bg:               #121711;
+  --crema-plinth:           #0C100C;  /* action zone band */
+  --crema-text:             #E6E4D8;  /* parchment */
+  --crema-muted:            #7A8A6E;
+  --crema-stroke:           #2A332A;
+}
+
+/* Display day variant — slightly brighter, less moody */
+.crema-display.day {
+  --crema-bg:               #1F2A1D;
+  --crema-text:             #F0EDDF;
+  --crema-muted:            #8A9A7E;
+}
+
+/* ===== Signature A — uppercase kerned label ===== */
+/* Apply anywhere a "label" feels right: sender names, day headers,
+ * section titles. Size is set by the host context. */
+.crema-label {
+  font-family: var(--crema-font-sans);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  line-height: 1;
+}
+
+/* ===== Type utilities ===== */
+.crema-mono { font-family: var(--crema-font-mono); }
