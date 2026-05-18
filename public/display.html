@@ -134,6 +134,15 @@
       margin-right: 0.4em;
       font-weight: 400;
     }
+    .msg .reply-context {
+      font-size: clamp(16px, 2.2vw, 24px);
+      font-style: italic;
+      color: var(--muted);
+      opacity: 0.7;
+      max-width: 70vw;
+      margin: 0 auto 18px;
+      line-height: 1.3;
+    }
 
     .reply-bar {
       margin-top: 36px;
@@ -273,9 +282,11 @@
     const shortcutsBar = document.getElementById('shortcuts-bar');
 
     const DEFAULT_DISPLAY_MS = 30_000;
+    const REPLY_DISPLAY_MS = 10_000;
     const MIN_DISPLAY_MS = 2_000;
     const REPLY_RETURN_DELAY_MS = 1_500;
     const NOTIF_VISIBLE_MS = 10_000;
+    const REPLY_CONTEXT_MAX_CHARS = 60;
 
     const dateFmt = new Intl.DateTimeFormat('fr-FR', {
       weekday: 'long', day: 'numeric', month: 'long',
@@ -320,6 +331,10 @@
       }[c]));
     }
 
+    function truncate(s, max) {
+      return s.length > max ? s.slice(0, max - 1).trimEnd() + '…' : s;
+    }
+
     // ===== Render =====
     function renderIdle() {
       const now = new Date();
@@ -349,7 +364,7 @@
       if (resetTimer) clearTimeout(resetTimer);
       const ttl = expiresAtMs
         ? Math.max(MIN_DISPLAY_MS, expiresAtMs - Date.now())
-        : DEFAULT_DISPLAY_MS;
+        : (data.isReply ? REPLY_DISPLAY_MS : DEFAULT_DISPLAY_MS);
       resetTimer = setTimeout(showIdle, ttl);
 
       if (expiresAtMs) startProgressAnimation(ttl);
@@ -357,15 +372,18 @@
 
     function renderMessage() {
       if (!currentMsg) return;
-      const { text, from, isReply } = currentMsg;
+      const { text, from, isReply, replyToText } = currentMsg;
       const fromLabel = from ? `<div class="from">${escapeHtml(from)}</div>` : '';
       const subtitle = `<div class="subtitle">${buildSubtitle()}</div>`;
+      const context = (isReply && replyToText)
+        ? `<div class="reply-context">en réponse à «&nbsp;${escapeHtml(truncate(replyToText, REPLY_CONTEXT_MAX_CHARS))}&nbsp;»</div>`
+        : '';
       const prefix = isReply ? '<span class="reply-prefix">↩</span>' : '';
       const progress = currentMsg.expiresAtMs
         ? '<div class="progress"><div class="progress-fill"></div></div>'
         : '';
       screen.className = 'msg';
-      screen.innerHTML = `${fromLabel}${subtitle}<div class="text">${prefix}${escapeHtml(text)}</div>${replyBarHtml()}${progress}`;
+      screen.innerHTML = `${fromLabel}${subtitle}${context}<div class="text">${prefix}${escapeHtml(text)}</div>${replyBarHtml()}${progress}`;
     }
 
     function buildSubtitle() {
@@ -458,10 +476,20 @@
       notifTimer = setTimeout(() => notifEl.classList.remove('visible'), NOTIF_VISIBLE_MS);
     }
 
-    // ===== Reply handling =====
+    // ===== Reply handling + tap-to-dismiss =====
     screen.addEventListener('click', async (e) => {
       const btn = e.target.closest('.reply-btn');
-      if (!btn || btn.disabled || !currentMsg?.fromInstanceId) return;
+
+      // Tap anywhere outside a reply button → dismiss the current message.
+      if (!btn) {
+        if (mode === 'message') showIdle();
+        return;
+      }
+
+      // Disabled button (already replied / failed): swallow the tap so the
+      // user doesn't accidentally dismiss the "✓ Sent" feedback.
+      if (btn.disabled || !currentMsg?.fromInstanceId) return;
+
       const idx = Number(btn.dataset.i);
       const items = activeReplyItems();
       const reply = items[idx];

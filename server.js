@@ -291,10 +291,10 @@ function trackPending({ id, text, targetOwner, expiresAt }) {
 
 function resolvePending(id) {
   const entry = pendingMessages.get(id);
-  if (!entry) return false;
+  if (!entry) return null;
   clearTimeout(entry.timer);
   pendingMessages.delete(id);
-  return true;
+  return entry;
 }
 
 // Shared send pipeline used by /send and /shortcut/send. Generates the msgId
@@ -370,8 +370,13 @@ app.post('/inbox', (req, res) => {
   const responseOptions = sanitizeResponseOptions(req.body?.responseOptions);
   if (!text) return res.status(400).json({ error: 'Message vide' });
 
-  // If this is a reply to one of our own pending messages, clear its expiry timer.
-  if (isReply && replyToMsgId) resolvePending(replyToMsgId);
+  // If this is a reply to one of our own pending messages, clear its expiry
+  // timer and grab the original text so we can show context on the display.
+  let replyToText = null;
+  if (isReply && replyToMsgId) {
+    const original = resolvePending(replyToMsgId);
+    if (original) replyToText = original.text;
+  }
 
   io.emit('message', {
     id,
@@ -380,6 +385,7 @@ app.post('/inbox', (req, res) => {
     fromInstanceId,
     isReply,
     expiresAt,
+    replyToText,
     responseOptions: responseOptions.length > 0 ? responseOptions : null,
   });
   res.json({ ok: true });
