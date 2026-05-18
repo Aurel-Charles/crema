@@ -325,12 +325,17 @@
     <button type="submit" class="send-btn" id="send" disabled>Envoyer</button>
   </form>
 
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js').catch(() => {});
     }
 
+    const socket = io();
+
     const MAX_OPTIONS = 5;
+    const TYPING_THROTTLE_MS = 3000;  // resend 'start' at most every 3 s
+    const TYPING_IDLE_MS = 3500;       // 'stop' after this much keyboard silence
     const meLabel = document.getElementById('me-label');
     const targetSel = document.getElementById('target');
     const textEl = document.getElementById('text');
@@ -354,7 +359,47 @@
       textEl.style.height = 'auto';
       textEl.style.height = Math.min(textEl.scrollHeight, 320) + 'px';
     }
-    textEl.addEventListener('input', autosizeTextarea);
+
+    // ===== Typing indicator (V6.2) =====
+    let lastTypingTarget = null;
+    let lastTypingStart = 0;
+    let typingIdleTimer = null;
+
+    function emitTyping(target, state) {
+      if (!target) return;
+      socket.emit('typing', { target, state });
+    }
+
+    function noteTyping() {
+      const target = targetSel.value;
+      if (!target) return;
+      const now = Date.now();
+      // If the user switched recipient mid-typing, tell the old one we stopped.
+      if (lastTypingTarget && lastTypingTarget !== target) {
+        emitTyping(lastTypingTarget, 'stop');
+        lastTypingStart = 0;
+      }
+      lastTypingTarget = target;
+      if (now - lastTypingStart > TYPING_THROTTLE_MS) {
+        emitTyping(target, 'start');
+        lastTypingStart = now;
+      }
+      if (typingIdleTimer) clearTimeout(typingIdleTimer);
+      typingIdleTimer = setTimeout(stopTyping, TYPING_IDLE_MS);
+    }
+
+    function stopTyping() {
+      if (typingIdleTimer) { clearTimeout(typingIdleTimer); typingIdleTimer = null; }
+      if (lastTypingStart === 0 || !lastTypingTarget) return;
+      emitTyping(lastTypingTarget, 'stop');
+      lastTypingStart = 0;
+    }
+
+    textEl.addEventListener('input', () => {
+      autosizeTextarea();
+      if (textEl.value.trim() === '') stopTyping();
+      else noteTyping();
+    });
 
     // ===== Helpers =====
     function escapeHtml(s) {
@@ -512,6 +557,7 @@
         selectedPreset = '5min';
         renderChips();
         renderPresets();
+        stopTyping();
       } catch (err) {
         status.textContent = err.message || 'Erreur';
         status.className = 'status err';

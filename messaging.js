@@ -277,5 +277,35 @@ export function init({ app, io }) {
         console.warn(`[read-receipt] failed → ${peer.owner}: ${err.message}`);
       }
     });
+
+    // ===== Typing indicators (V6.2) =====
+    // PWA tells its local server "I'm typing toward X". We forward to X's
+    // /typing endpoint, which lights up the indicator on X's display.
+    socket.on('typing', async ({ target, state } = {}) => {
+      if (!target || (state !== 'start' && state !== 'stop')) return;
+      const peer = findPeerByInstanceId(target);
+      if (!peer) return;
+      try {
+        await fetch(`http://${peer.address}:${peer.port}/typing`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: OWNER, state }),
+          signal: AbortSignal.timeout(3000),
+        });
+      } catch {
+        // Typing is best-effort and noisy — swallow without logging.
+      }
+    });
+  });
+
+  // Peer notifies us that one of their users is typing toward this Pi.
+  app.post('/typing', (req, res) => {
+    const from = typeof req.body?.from === 'string' ? req.body.from.trim() : '';
+    const state = req.body?.state;
+    if (!from || (state !== 'start' && state !== 'stop')) {
+      return res.status(400).json({ error: 'bad payload' });
+    }
+    io.emit('typing', { from, state });
+    res.json({ ok: true });
   });
 }
