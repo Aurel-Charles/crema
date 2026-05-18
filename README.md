@@ -9,7 +9,7 @@ in idle as an ambient amber clock with day/night theming, shows who else is
 online on the LAN, and exposes its configured shortcuts at the bottom of the
 screen.
 
-**Current version:** [v5.1.0](https://github.com/Aurel-Charles/crema/releases/tag/v5.1.0)
+**Current version:** [v6.2.0](https://github.com/Aurel-Charles/crema/releases/tag/v6.2.0)
 — see [CLAUDE.md](./CLAUDE.md) for the full project spec and roadmap.
 
 ## What works today
@@ -66,6 +66,21 @@ screen.
   one. Queue is capped at 5, oldest dropped on overflow. Queued messages
   keep their actual arrival time so the `il y a Xmin` subtitle stays
   honest when they finally surface.
+- **Conversation history (V6.0)** — every sent and received message is
+  journaled per-Pi in `data/history.db` (SQLite, WAL mode). Browse from
+  the PWA via the clock icon in the header: `/history` shows messages
+  grouped by day (Aujourd'hui / Hier / full date), with direction,
+  sender/recipient, time, status badge, and reply context.
+- **Read receipts (V6.1)** — when the recipient's display actually shows
+  your message, your `/history` page flips its badge from "en attente"
+  to "vu" in real time, then to "répondu" or "expiré" as the message
+  evolves. Status updates are surgical (no full refresh) and protected
+  against downgrading a terminal state. New messages also appear in
+  `/history` live without reload.
+- **Typing indicators (V6.2)** — when a peer starts typing a message
+  toward this Pi, the presence row in the display swaps `en ligne` for
+  `écrit…` with subtle bouncing dots. Throttled on send (max one event
+  every 3 s), auto-cleared after 5 s of silence on the receiving side.
 - **Send reliability** — retry with hostname re-resolution on transient
   avahi flakiness; stale peers dropped immediately when a new instance
   announces under the same owner; mDNS shutdown grace so the "bye" packet
@@ -96,16 +111,19 @@ expiry timer before the toast fires. Shortcut taps on the Pi go through
 ## Tech stack
 
 Node.js 20, Express, Socket.IO, [`mdns`](https://github.com/agnat/node_mdns)
-(via avahi compat on Linux), [`suncalc`](https://github.com/mourner/suncalc).
+(via avahi compat on Linux), [`suncalc`](https://github.com/mourner/suncalc),
+[`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3) (synchronous,
+WAL mode, no armv7 prebuild so it compiles from source on 32-bit Pi OS).
 Frontend is vanilla HTML/CSS/JS — no framework.
 
 Per-Pi runtime state lives in `data/` (gitignored): `replies.json` for the
 quick-reply config, `shortcuts.json` for the touch shortcuts, `dnd.json`
-for the Do Not Disturb flag.
+for the Do Not Disturb flag, and `history.db` for the SQLite message
+journal.
 
 The server is split into focused modules (`config.js`, `peers.js`,
-`store.js`, `messaging.js`) wired together by a thin `server.js`
-entrypoint, to keep things tidy as the data model grows toward V6.
+`store.js`, `messaging.js`, `db.js`) wired together by a thin `server.js`
+entrypoint.
 
 ## Setting up a new Pi
 
@@ -159,6 +177,10 @@ ssh <user>@pi-<name>.local "cd ~/crema && git pull && sudo systemctl restart cre
 ```
 
 If `package.json` changed, add `&& npm install` before the restart.
+On 32-bit Pi OS (armv7), `better-sqlite3` compiles from source on
+`npm install` — `install-pi.sh` already provisions `build-essential`
+and `python3` so this just works, but the first install takes a few
+minutes.
 
 To reload the display without rebooting (kiosk has an auto-restart loop):
 
@@ -178,6 +200,9 @@ ssh <user>@pi-<name>.local pkill -f chromium
 - **Inspect / reset per-Pi config:** `cat ~/crema/data/replies.json` or
   `cat ~/crema/data/shortcuts.json`. Delete the file to wipe and re-seed
   (replies get the defaults back, shortcuts stay empty).
+- **Inspect history:** `sqlite3 ~/crema/data/history.db "SELECT * FROM messages ORDER BY created_at DESC LIMIT 20;"`
+  Or just open `/history` from the PWA. To wipe: `rm ~/crema/data/history.db*`
+  (the `.db-wal` and `.db-shm` sidecars get re-created on next start).
 - **Force peer re-discovery** after a long network outage: when both Pis
   recover, neither will rebroadcast its mDNS announcement spontaneously, so
   `sudo systemctl restart crema` on each clears the slate.
@@ -213,11 +238,15 @@ server.js              entrypoint: Express + Socket.IO, page routes, wiring, shu
 config.js              env, owner derivation, paths, TTL bounds, constants
 peers.js               mDNS advertise + browse, peer map, dedup, health check
 store.js               atomic JSON persistence for replies, shortcuts, DND + their routes
-messaging.js           pendingMessages, sendToPeer, /send /shortcut/send /reply /inbox
+messaging.js           pendingMessages, sendToPeer, /send /shortcut/send /reply /inbox,
+                       /read-receipt, /typing, msg:status + history:new broadcasts
+db.js                  SQLite history (better-sqlite3, WAL): insert/update/group-by-day
 public/
-  index.html           PWA sender (target / message / response options / TTL)
+  index.html           PWA sender (target / message / response options / TTL / typing)
   settings.html        PWA Préférences (DND toggle + replies + shortcuts editor)
-  display.html         Pi kiosk (clock, message, queue, DND moon, replies, shortcuts)
+  history.html         PWA history page (grouped by day, live status updates)
+  display.html         Pi kiosk (clock, message, queue, DND moon, replies, shortcuts,
+                       presence + typing indicator)
   manifest.json        PWA manifest
   service-worker.js    minimal SW to enable PWA install
   icon.svg
@@ -225,8 +254,9 @@ data/                  per-Pi runtime state (gitignored)
   replies.json         configured quick replies
   shortcuts.json       configured touch shortcuts
   dnd.json             Do Not Disturb flag
+  history.db           SQLite message journal (sent + received)
 start.sh               wraps `node server.js` with nvm sourcing
 start-display.sh       Chromium kiosk launcher with restart loop
-install-pi.sh          one-shot Pi setup (systemd + autostart + emoji + blanking)
+install-pi.sh          one-shot Pi setup (systemd + autostart + emoji + blanking + build tools)
 CLAUDE.md              project spec, design, roadmap
 ```

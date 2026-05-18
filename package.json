@@ -1,7 +1,7 @@
 {
   "name": "crema",
-  "version": "0.6.0",
-  "description": "Pi messenger — V6.0 conversation history (SQLite)",
+  "version": "0.6.2",
+  "description": "Pi messenger — V6.2 history + read receipts + typing indicators",
   "type": "module",
   "main": "server.js",
   "scripts": {
