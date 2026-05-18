@@ -5,6 +5,7 @@ import {
   MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH, MAX_SHORTCUT_TEXT, MAX_ICON_LENGTH,
   DEFAULT_REPLIES, MIN_TTL_MS, MAX_TTL_MS,
 } from './config.js';
+import { sysLog } from './logger.js';
 
 async function persistAtomic(path, data) {
   await mkdir(DATA_DIR, { recursive: true });
@@ -166,6 +167,7 @@ export async function init({ app, io }) {
       console.error('[dnd] persist failed:', err.message);
     }
     io.emit('dnd:updated', { enabled: dndEnabled });
+    sysLog(dndEnabled ? 'dnd:on' : 'dnd:off', dndEnabled ? 'Mode Ne Pas Déranger activé' : 'Mode Ne Pas Déranger désactivé');
     res.json({ enabled: dndEnabled });
   });
 }

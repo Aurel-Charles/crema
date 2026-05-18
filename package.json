@@ -1,7 +1,7 @@
 {
   "name": "crema",
-  "version": "0.6.2",
-  "description": "Pi messenger — V6.2 history + read receipts + typing indicators",
+  "version": "0.6.3",
+  "description": "Pi messenger — V6.3 structured event log + /logs PWA page",
   "type": "module",
   "main": "server.js",
   "scripts": {

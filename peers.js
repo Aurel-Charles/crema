@@ -3,6 +3,7 @@ import { lookup as dnsLookup } from 'dns/promises';
 import {
   INSTANCE_ID, OWNER, PORT, SERVICE_NAME, SERVICE_TYPE,
 } from './config.js';
+import { peerLog, errLog } from './logger.js';
 
 const HEALTH_CHECK_INTERVAL_MS = 10_000;
 const HEALTH_CHECK_TIMEOUT_MS = 3_000;
@@ -62,7 +63,7 @@ export function init({ io }) {
       txtRecord: { owner: OWNER, instanceId: INSTANCE_ID },
     },
   );
-  advertisement.on('error', (err) => console.error('[mDNS advertise]', err.message));
+  advertisement.on('error', (err) => errLog('mdns:advertise-error', err.message));
   advertisement.start();
 
   // mdns 2.7.2's getaddrinfo step crashes on Node 18+ (deprecated internal API).
@@ -94,7 +95,9 @@ export function init({ io }) {
       if (p.owner === peer.owner && p.instanceId !== peer.instanceId) {
         peerMap.delete(name);
         peerFailures.delete(name);
-        console.log(`[mDNS] stale dropped: ${p.owner} (${p.instanceId.slice(0, 8)})`);
+        peerLog('peer:dedup', `${p.owner} stale instance dropped (${p.instanceId.slice(0, 8)})`, {
+          owner: p.owner, oldInstanceId: p.instanceId, newInstanceId: peer.instanceId,
+        });
         io.emit('peer:down', { instanceId: p.instanceId });
       }
     }
@@ -103,10 +106,14 @@ export function init({ io }) {
     peerMap.set(service.name, peer);
     peerFailures.set(service.name, 0);
     if (!existing) {
-      console.log(`[mDNS] up: ${peer.owner} @ ${address}:${peer.port}`);
+      peerLog('peer:up', `${peer.owner} apparu sur ${address}:${peer.port}`, {
+        owner: peer.owner, address, port: peer.port,
+      });
       io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner });
     } else if (existing.address !== address) {
-      console.log(`[mDNS] re-resolved: ${peer.owner} @ ${address}:${peer.port}`);
+      peerLog('peer:reresolved', `${peer.owner} → nouvelle IP ${address}:${peer.port}`, {
+        owner: peer.owner, oldAddress: existing.address, address,
+      });
     }
   });
 
@@ -115,12 +122,12 @@ export function init({ io }) {
     if (peer) {
       peerMap.delete(service.name);
       peerFailures.delete(service.name);
-      console.log(`[mDNS] down: ${peer.owner}`);
+      peerLog('peer:down-mdns', `${peer.owner} a annoncé son départ`, { owner: peer.owner });
       io.emit('peer:down', { instanceId: peer.instanceId });
     }
   });
 
-  browser.on('error', (err) => console.error('[mDNS browse]', err.message));
+  browser.on('error', (err) => errLog('mdns:browse-error', err.message));
   browser.start();
 
   // Active health check — mDNS "bye" packets are unreliable (lost when a peer
@@ -136,7 +143,12 @@ export function init({ io }) {
         const failures = (peerFailures.get(name) ?? 0) + 1;
         peerFailures.set(name, failures);
         if (failures >= HEALTH_MAX_FAILURES) {
-          console.log(`[health] dropped ${peer.owner} after ${failures} failed pings (${err.message})`);
+          peerLog(
+            'peer:down-health',
+            `${peer.owner} retiré après ${failures} pings en échec (${err.message})`,
+            { owner: peer.owner, failures, reason: err.message },
+            'warn'
+          );
           peerMap.delete(name);
           peerFailures.delete(name);
           io.emit('peer:down', { instanceId: peer.instanceId });

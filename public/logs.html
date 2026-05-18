@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Crema" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <title>Crema — Activité</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f7f7f8;
+      color: #1a1410;
+      min-height: 100vh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    header {
+      padding: 24px 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .back {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: #1a1410;
+      text-decoration: none;
+      border-radius: 12px;
+      transition: background 0.15s;
+    }
+    .back:active { background: #ebebef; }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .filters {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #f7f7f8;
+      padding: 16px 20px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      border-bottom: 1px solid #ebebef;
+    }
+    .chip {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b6b70;
+      background: #fff;
+      border: 1px solid #e2e2e6;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .chip:active { transform: scale(0.96); }
+    .chip.active {
+      background: #1a1410;
+      color: #fff;
+      border-color: #1a1410;
+    }
+
+    main {
+      padding: 8px 0 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .day {
+      margin-top: 16px;
+    }
+    .day h2 {
+      margin: 0 20px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #6b6b70;
+    }
+
+    .events {
+      background: #fff;
+      border-top: 1px solid #ebebef;
+      border-bottom: 1px solid #ebebef;
+    }
+
+    .event {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 10px 20px;
+      border-bottom: 1px solid #f0f0f4;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .event:last-child { border-bottom: none; }
+
+    .event .time {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #b0b0b8;
+      flex-shrink: 0;
+      min-width: 62px;
+    }
+    .event .cat {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      min-width: 54px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .event .msg {
+      flex: 1;
+      min-width: 0;
+      word-wrap: break-word;
+    }
+
+    .cat-peer    { background: #e0ecf5; color: #2c5f8a; }
+    .cat-message { background: rgba(244, 166, 90, 0.22); color: #8a5a14; }
+    .cat-system  { background: #ebebef; color: #555; }
+    .cat-error   { background: #f7e6e1; color: #b3261e; }
+
+    .event.level-warn  .msg { color: #8a5a14; }
+    .event.level-error .msg { color: #b3261e; font-weight: 500; }
+
+    .empty, .loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: #b0b0b8;
+      font-size: 14px;
+    }
+
+    .actions {
+      padding: 24px 20px 8px;
+      text-align: center;
+    }
+    .cleanup {
+      padding: 10px 18px;
+      font-size: 13px;
+      font-family: inherit;
+      color: #6b6b70;
+      background: transparent;
+      border: 1px dashed #b8b8bd;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .cleanup:active { background: #ebebef; }
+    .cleanup:disabled { opacity: 0.4; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/" class="back" aria-label="Retour">←</a>
+    <h1>Activité</h1>
+  </header>
+
+  <div class="filters" id="filters">
+    <button type="button" class="chip active" data-cat="all">Tous</button>
+    <button type="button" class="chip" data-cat="peer">Peers</button>
+    <button type="button" class="chip" data-cat="message">Messages</button>
+    <button type="button" class="chip" data-cat="system">Système</button>
+    <button type="button" class="chip" data-cat="error">Erreurs</button>
+  </div>
+
+  <main id="main">
+    <div class="loading">Chargement…</div>
+  </main>
+
+  <div class="actions">
+    <button type="button" class="cleanup" id="cleanup">Nettoyer les logs &gt; 7 jours</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    }
+
+    const mainEl = document.getElementById('main');
+    const filtersEl = document.getElementById('filters');
+    const cleanupBtn = document.getElementById('cleanup');
+
+    let currentFilter = 'all';
+
+    const timeFmt = new Intl.DateTimeFormat('fr-FR', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
+    const dayFmt = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long',
+    });
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    function dateKey(ms) {
+      const d = new Date(ms);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function offsetKey(daysAgo) {
+      const d = new Date();
+      d.setDate(d.getDate() - daysAgo);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function dayLabel(key) {
+      if (key === offsetKey(0)) return "Aujourd'hui";
+      if (key === offsetKey(1)) return 'Hier';
+      const [y, m, d] = key.split('-').map(Number);
+      const label = dayFmt.format(new Date(y, m - 1, d));
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    }
+
+    function catLabel(cat) {
+      return ({ peer: 'PEER', message: 'MSG', system: 'SYS', error: 'ERR' })[cat] ?? cat.toUpperCase();
+    }
+
+    function renderEvent(ev) {
+      return `
+        <div class="event level-${esc(ev.level)}">
+          <span class="time">${timeFmt.format(new Date(ev.ts))}</span>
+          <span class="cat cat-${esc(ev.category)}">${catLabel(ev.category)}</span>
+          <span class="msg">${esc(ev.message)}</span>
+        </div>
+      `;
+    }
+
+    function renderEvents(events) {
+      if (!events || events.length === 0) {
+        mainEl.innerHTML = '<div class="empty">Aucun évènement pour ce filtre.</div>';
+        return;
+      }
+      // Group by local day
+      const groups = [];
+      let current = null;
+      for (const ev of events) {
+        const key = dateKey(ev.ts);
+        if (!current || current.key !== key) {
+          current = { key, items: [] };
+          groups.push(current);
+        }
+        current.items.push(ev);
+      }
+      mainEl.innerHTML = groups.map((g) => `
+        <section class="day">
+          <h2>${esc(dayLabel(g.key))}</h2>
+          <div class="events">${g.items.map(renderEvent).join('')}</div>
+        </section>
+      `).join('');
+    }
+
+    async function load() {
+      const q = currentFilter === 'all' ? '' : `&category=${currentFilter}`;
+      try {
+        const r = await fetch(`/logs.json?limit=300${q}`);
+        const data = await r.json();
+        renderEvents(data.events);
+      } catch {
+        mainEl.innerHTML = '<div class="empty">Impossible de charger l’activité.</div>';
+      }
+    }
+
+    filtersEl.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      currentFilter = chip.dataset.cat;
+      for (const c of filtersEl.querySelectorAll('.chip')) {
+        c.classList.toggle('active', c === chip);
+      }
+      load();
+    });
+
+    cleanupBtn.addEventListener('click', async () => {
+      if (!confirm('Supprimer les évènements de plus de 7 jours ?')) return;
+      cleanupBtn.disabled = true;
+      try {
+        const r = await fetch('/logs/cleanup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ days: 7 }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error();
+        await load();
+        cleanupBtn.textContent = `${data.removed} supprimés`;
+        setTimeout(() => { cleanupBtn.textContent = 'Nettoyer les logs > 7 jours'; }, 2000);
+      } catch {
+        cleanupBtn.textContent = 'Échec';
+        setTimeout(() => { cleanupBtn.textContent = 'Nettoyer les logs > 7 jours'; }, 2000);
+      } finally {
+        cleanupBtn.disabled = false;
+      }
+    });
+
+    load();
+
+    // ===== Live updates =====
+    const socket = io();
+    let refetchTimer = null;
+    function scheduleRefetch() {
+      if (refetchTimer) clearTimeout(refetchTimer);
+      refetchTimer = setTimeout(() => { refetchTimer = null; load(); }, 350);
+    }
+    socket.on('event:new', (ev) => {
+      if (currentFilter !== 'all' && ev.category !== currentFilter) return;
+      scheduleRefetch();
+    });
+  </script>
+</body>
+</html>

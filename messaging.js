@@ -3,6 +3,9 @@ import { INSTANCE_ID, OWNER, MAX_LABEL_LENGTH, MAX_REPLIES } from './config.js';
 import { clampTtl, findShortcut } from './store.js';
 import { findPeerByInstanceId, findPeerByOwner, resolveHost } from './peers.js';
 import * as db from './db.js';
+import { msgLog, errLog } from './logger.js';
+
+const trunc = (s, n = 40) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
 // When /send succeeds, the message is kept here until either:
 //   - the peer replies (we get a /inbox hit with replyToMsgId), or
@@ -43,7 +46,7 @@ function trackPending({ id, text, targetOwner, expiresAt, io }) {
     const entry = pendingMessages.get(id);
     if (!entry) return;
     pendingMessages.delete(id);
-    console.log(`[pending] expired without reply → ${targetOwner}: ${text.slice(0, 30)}`);
+    msgLog('msg:expired', `« ${trunc(text)} » sans réponse de ${targetOwner}`, { id, targetOwner });
     io.emit('msg:expired', { id, text, targetOwner });
     db.setStatus(id, 'expired');
     io.emit('msg:status', { id, status: 'expired' });
@@ -71,7 +74,7 @@ async function sendToPeer(peer, { text, ttlMs, responseOptions = null, io }) {
   try {
     await postInbox(peer.address, peer.port, payload);
   } catch (err1) {
-    console.warn(`[send] retry → ${peer.owner} (${err1.message})`);
+    msgLog('msg:send-retry', `Renvoi → ${peer.owner} (${err1.message})`, { to: peer.owner }, 'warn');
     const fresh = await resolveHost(peer.host);
     peer.address = fresh;
     await postInbox(fresh, peer.port, payload);
@@ -90,6 +93,7 @@ async function sendToPeer(peer, { text, ttlMs, responseOptions = null, io }) {
     status: 'pending',
   });
   io.emit('history:new');
+  msgLog('msg:sent', `→ ${peer.owner} : ${trunc(text)}`, { id, to: peer.owner, ttlMs: expiresAtMs - Date.now() });
   return { id, expiresAt };
 }
 
@@ -111,7 +115,7 @@ export function init({ app, io }) {
       const result = await sendToPeer(peer, { text, ttlMs, responseOptions, io });
       return res.json({ ok: true, ...result });
     } catch (err) {
-      console.error(`[send] failed → ${peer.owner}:`, err.message);
+      errLog('msg:send-failed', `Envoi → ${peer.owner} échoué : ${err.message}`, { to: peer.owner });
       return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
     }
   });
@@ -129,7 +133,7 @@ export function init({ app, io }) {
       const result = await sendToPeer(peer, { text: shortcut.text, ttlMs: shortcut.ttlMs, io });
       return res.json({ ok: true, ...result });
     } catch (err) {
-      console.error(`[shortcut] failed → ${peer.owner}:`, err.message);
+      errLog('msg:shortcut-failed', `Raccourci → ${peer.owner} échoué : ${err.message}`, { to: peer.owner });
       return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
     }
   });
@@ -157,14 +161,14 @@ export function init({ app, io }) {
       await postInbox(peer.address, peer.port, payload);
       delivered = true;
     } catch (err1) {
-      console.warn(`[reply] retry → ${peer.owner} (${err1.message})`);
+      msgLog('msg:reply-retry', `Renvoi réponse → ${peer.owner} (${err1.message})`, { to: peer.owner }, 'warn');
       try {
         const fresh = await resolveHost(peer.host);
         peer.address = fresh;
         await postInbox(fresh, peer.port, payload);
         delivered = true;
       } catch (err2) {
-        console.error(`[reply] failed → ${peer.owner}:`, err2.message);
+        errLog('msg:reply-failed', `Réponse → ${peer.owner} échouée : ${err2.message}`, { to: peer.owner });
         return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
       }
     }
@@ -183,6 +187,7 @@ export function init({ app, io }) {
         status: 'sent',
       });
       io.emit('history:new');
+      msgLog('msg:reply-sent', `↩ → ${peer.owner} : ${trunc(label)}`, { to: peer.owner, replyToMsgId });
     }
     return res.json({ ok: true });
   });
@@ -230,6 +235,11 @@ export function init({ app, io }) {
       status: 'received',
     });
     io.emit('history:new');
+    msgLog(
+      isReply ? 'msg:reply-received' : 'msg:received',
+      `${isReply ? '↩ ' : ''}← ${from} : ${trunc(text)}`,
+      { id: rowId, from, isReply }
+    );
 
     io.emit('message', {
       id,
@@ -274,6 +284,8 @@ export function init({ app, io }) {
           signal: AbortSignal.timeout(5000),
         });
       } catch (err) {
+        // Read receipts are best-effort and noisy; log as warn without
+        // an event row so /logs doesn't fill with these.
         console.warn(`[read-receipt] failed → ${peer.owner}: ${err.message}`);
       }
     });

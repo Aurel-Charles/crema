@@ -26,6 +26,18 @@ export function init() {
       status TEXT NOT NULL DEFAULT 'pending'
     );
     CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('peer', 'message', 'system', 'error')),
+      level TEXT NOT NULL CHECK(level IN ('info', 'warn', 'error')),
+      event TEXT NOT NULL,
+      message TEXT NOT NULL,
+      details TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_events_cat_ts ON events(category, ts DESC);
   `);
   stmts.insert = db.prepare(`
     INSERT INTO messages (
@@ -42,6 +54,17 @@ export function init() {
   );
   stmts.getById = db.prepare('SELECT * FROM messages WHERE id = ?');
   stmts.listRecent = db.prepare('SELECT * FROM messages ORDER BY created_at DESC LIMIT ?');
+
+  stmts.insertEvent = db.prepare(
+    'INSERT INTO events (ts, category, level, event, message, details) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+  stmts.listEvents = db.prepare(
+    'SELECT * FROM events ORDER BY ts DESC LIMIT ?'
+  );
+  stmts.listEventsByCategory = db.prepare(
+    'SELECT * FROM events WHERE category = ? ORDER BY ts DESC LIMIT ?'
+  );
+  stmts.deleteEventsBefore = db.prepare('DELETE FROM events WHERE ts < ?');
 }
 
 function rowToMessage(row) {
@@ -135,6 +158,40 @@ export function listGroupedByDay(limit = 200) {
     current.messages.push(msg);
   }
   return groups;
+}
+
+// ===== Events log (V6.3) =====
+
+function rowToEvent(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    ts: row.ts,
+    category: row.category,
+    level: row.level,
+    event: row.event,
+    message: row.message,
+    details: row.details ? JSON.parse(row.details) : null,
+  };
+}
+
+export function insertEvent({ ts, category, level, event, message, details = null }) {
+  stmts.insertEvent.run(
+    ts, category, level, event, message,
+    details === null || details === undefined ? null : (typeof details === 'string' ? details : JSON.stringify(details))
+  );
+}
+
+export function listEvents({ limit = 200, category = null } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 2000);
+  const rows = category
+    ? stmts.listEventsByCategory.all(category, safeLimit)
+    : stmts.listEvents.all(safeLimit);
+  return rows.map(rowToEvent);
+}
+
+export function cleanupEvents(olderThanMs) {
+  return stmts.deleteEventsBefore.run(olderThanMs).changes;
 }
 
 export function close() {

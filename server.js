@@ -9,6 +9,8 @@ import * as peers from './peers.js';
 import * as store from './store.js';
 import * as messaging from './messaging.js';
 import * as db from './db.js';
+import * as logger from './logger.js';
+import { sysLog } from './logger.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -21,6 +23,7 @@ app.get('/', (req, res) => res.sendFile(join(PUBLIC_DIR, 'index.html')));
 app.get('/display', (req, res) => res.sendFile(join(PUBLIC_DIR, 'display.html')));
 app.get('/settings', (req, res) => res.sendFile(join(PUBLIC_DIR, 'settings.html')));
 app.get('/history', (req, res) => res.sendFile(join(PUBLIC_DIR, 'history.html')));
+app.get('/logs', (req, res) => res.sendFile(join(PUBLIC_DIR, 'logs.html')));
 
 app.get('/me', (req, res) => {
   res.json({ owner: OWNER, instanceId: INSTANCE_ID });
@@ -46,21 +49,40 @@ app.get('/history.json', (req, res) => {
   res.json({ owner: OWNER, groups: db.listGroupedByDay(limit) });
 });
 
+app.get('/logs.json', (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 2000);
+  const category = typeof req.query.category === 'string' && req.query.category !== 'all'
+    ? req.query.category
+    : null;
+  res.json({ owner: OWNER, events: db.listEvents({ limit, category }) });
+});
+
+app.post('/logs/cleanup', (req, res) => {
+  const days = Math.max(1, Math.min(365, Number(req.body?.days) || 7));
+  const cutoff = Date.now() - days * 24 * 3600 * 1000;
+  const removed = db.cleanupEvents(cutoff);
+  sysLog('logs:cleanup', `${removed} évènements antérieurs à ${days} j supprimés`, { days, removed });
+  res.json({ ok: true, removed });
+});
+
 io.on('connection', (socket) => {
   socket.emit('peers:init', peers.listPeers());
 });
 
 db.init();
+logger.init({ io });
 await store.init({ app, io });
 messaging.init({ app, io });
 const peerLifecycle = peers.init({ io });
 
 httpServer.listen(PORT, () => {
   console.log(`Crema — ${OWNER} on http://localhost:${PORT}`);
+  sysLog('server:start', `Crema démarré (${OWNER}) sur port ${PORT}`, { owner: OWNER, port: PORT, instanceId: INSTANCE_ID });
 });
 
 function shutdown() {
   console.log('\nArrêt…');
+  sysLog('server:stop', 'Crema en cours d\'arrêt');
   peerLifecycle.stop();
   db.close();
   // 2s grace to let the mDNS "bye" packet reach peers, so they don't keep us
