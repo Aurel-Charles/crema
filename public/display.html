@@ -108,7 +108,8 @@
       box-shadow: 0 0 8px var(--crema-presence);
       flex-shrink: 0;
     }
-    .presence .name { color: var(--crema-text); font-weight: 600; }
+    /* Name wears .crema-label in markup; we only need the color override. */
+    .presence .name { color: var(--crema-text); }
     .typing-dots {
       display: inline-block;
       letter-spacing: 1px;
@@ -160,12 +161,12 @@
       font-variant-numeric: tabular-nums;
       transition: color 1.5s ease;
     }
+    /* The date wears the .crema-label signature (set in markup) — same
+     * kerned-uppercase identity mark used by day headers in /history. */
     .idle .date {
-      font-size: clamp(18px, 2.6vw, 32px);
+      font-size: clamp(14px, 1.8vw, 22px);
       color: var(--crema-muted);
-      margin-top: 8px;
-      text-transform: capitalize;
-      font-weight: 400;
+      margin-top: 18px;
       transition: color 1.5s ease;
     }
 
@@ -240,10 +241,13 @@
       background: rgba(168, 196, 156, 0.22);
     }
     .reply-btn:disabled { opacity: 0.5; cursor: default; }
+    /* Filled sage — unambiguous success. Was border-only on a sage-tinted
+     * bg, which read too close to the resting state since presence and
+     * accent share the same #A8C49C. */
     .reply-btn.sent {
-      background: rgba(168, 196, 156, 0.15);
-      border-color: var(--crema-presence);
-      color: var(--crema-presence);
+      background: var(--crema-accent);
+      border-color: var(--crema-accent);
+      color: var(--crema-accent-ink);
     }
     .reply-btn.failed {
       background: rgba(179, 38, 30, 0.15);
@@ -265,7 +269,6 @@
       background: var(--crema-accent);
       transform-origin: left center;
       transform: scaleX(1);
-      opacity: 0.7;
     }
 
     /* Shortcuts row in idle (V5) */
@@ -423,7 +426,7 @@
       screen.className = 'idle';
       screen.innerHTML = `
         <div class="clock">${timeFmt.format(now)}</div>
-        <div class="date">${dateFmt.format(now)}</div>
+        <div class="date crema-label">${dateFmt.format(now)}</div>
       `;
     }
 
@@ -534,7 +537,7 @@
         rows.push(`
           <div class="presence">
             <span class="dot"></span>
-            <span><span class="name">${escapeHtml(owner)}</span> ${statusHtml}</span>
+            <span><span class="name crema-label">${escapeHtml(owner)}</span> ${statusHtml}</span>
           </div>
         `);
       }
