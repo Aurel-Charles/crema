@@ -65,9 +65,20 @@
       -webkit-tap-highlight-color: transparent;
     }
     .dnd-btn:active { background: rgba(244, 166, 90, 0.18); }
-    .dnd-btn .moon { width: 22px; height: 22px; transition: fill 0.2s; }
-    .dnd-btn.on { color: var(--accent); }
-    .dnd-btn.on .moon { fill: var(--accent); fill-opacity: 0.18; }
+    .dnd-btn .moon {
+      width: 22px;
+      height: 22px;
+      transition: fill 0.2s ease, stroke 0.2s ease;
+    }
+    .dnd-btn.on {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 14px rgba(244, 166, 90, 0.4);
+    }
+    .dnd-btn.on .moon {
+      fill: var(--bg);
+      stroke: var(--bg);
+    }
     .dnd-btn .badge {
       position: absolute;
       top: -2px;
@@ -87,6 +98,11 @@
       font-variant-numeric: tabular-nums;
     }
     .dnd-btn .badge[hidden] { display: none; }
+    .dnd-btn.on .badge {
+      background: var(--bg);
+      color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent);
+    }
 
     .presence {
       display: flex;
@@ -418,7 +434,9 @@
 
     function showMessage(data) {
       mode = 'message';
-      const receivedAt = Date.now();
+      // Use arrivedAt if set (message was queued), else stamp now.
+      // This keeps the "il y a Xs" subtitle honest for drained messages.
+      const receivedAt = data.arrivedAt ?? Date.now();
       const expiresAtMs = data.expiresAt ? Date.parse(data.expiresAt) : null;
       currentMsg = { ...data, receivedAt, expiresAtMs };
       renderMessage();
@@ -558,8 +576,9 @@
       if (messageQueue.length >= QUEUE_CAP) messageQueue.shift();
       messageQueue.push(data);
       updateBadge();
-      const sender = data.from ? `${data.from} : ` : '';
-      showNotif(`${sender}${truncate(data.text, NOTIF_PREVIEW_MAX_CHARS)}`);
+      const sender = data.from ? `${data.from} · ` : '';
+      const ts = timeFmt.format(new Date(data.arrivedAt));
+      showNotif(`${sender}${ts} · ${truncate(data.text, NOTIF_PREVIEW_MAX_CHARS)}`);
     }
 
     function maybeDrainNext() {
@@ -791,6 +810,9 @@
 
     socket.on('message', (data) => {
       if (!data || typeof data.text !== 'string' || !data.text.trim()) return;
+      // Stamp the arrival time so the "il y a Xs" subtitle stays honest
+      // even if the message sits in the queue for a while.
+      data.arrivedAt = Date.now();
       // Hold the message back if we're already showing one or DND is on.
       // It'll be drained later from the queue.
       if (mode === 'message' || dndEnabled) {
