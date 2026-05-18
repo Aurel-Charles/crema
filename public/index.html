@@ -109,9 +109,11 @@
     }
     textarea {
       min-height: 110px;
+      max-height: 320px;
       resize: none;
       padding: 16px;
       font-size: 18px;
+      overflow-y: auto;
     }
     select:focus, textarea:focus {
       border-color: #f4a65a;
@@ -334,6 +336,13 @@
     let ttlManuallySet = false;       // true once user clicks a preset
     let peers = [];
 
+    // ===== Textarea auto-resize =====
+    function autosizeTextarea() {
+      textEl.style.height = 'auto';
+      textEl.style.height = Math.min(textEl.scrollHeight, 320) + 'px';
+    }
+    textEl.addEventListener('input', autosizeTextarea);
+
     // ===== Helpers =====
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({
@@ -484,6 +493,7 @@
         status.className = 'status ok';
         // Reset for next message
         textEl.value = '';
+        textEl.style.height = '';
         options = [];
         ttlManuallySet = false;
         selectedPreset = '5min';

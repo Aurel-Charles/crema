@@ -66,6 +66,44 @@
       margin: 0 0 12px;
     }
 
+    /* DND toggle row */
+    .dnd-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .dnd-row .copy { flex: 1; min-width: 0; }
+    .dnd-row h2 { margin: 0 0 4px; }
+    .dnd-row .hint { margin: 0; }
+    .toggle {
+      flex-shrink: 0;
+      position: relative;
+      width: 52px;
+      height: 32px;
+      padding: 0;
+      background: #d8d8dd;
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .toggle .toggle-knob {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 26px;
+      height: 26px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s ease;
+    }
+    .toggle[aria-pressed="true"] { background: #f4a65a; }
+    .toggle[aria-pressed="true"] .toggle-knob { transform: translateX(20px); }
+    .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* Rows (replies) */
     .rows { display: flex; flex-direction: column; gap: 10px; }
     .row {
@@ -206,6 +244,18 @@
 
   <form id="form">
     <section>
+      <div class="dnd-row">
+        <div class="copy">
+          <h2>Ne pas déranger</h2>
+          <p class="hint">Les messages reçus s'empilent en notif au lieu de prendre l'écran.</p>
+        </div>
+        <button type="button" class="toggle" id="dnd-toggle" aria-pressed="false" aria-label="Ne pas déranger">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+    </section>
+
+    <section>
       <h2>Réponses rapides</h2>
       <p class="hint">Boutons proposés sur le Pi quand tu reçois un message. Max 5.</p>
       <div class="rows" id="replies-rows"></div>
@@ -223,6 +273,7 @@
     <button type="submit" class="save" id="save">Enregistrer</button>
   </form>
 
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js').catch(() => {});
@@ -235,6 +286,7 @@
     const replyAddBtn = document.getElementById('reply-add');
     const shortcutsCardsEl = document.getElementById('shortcuts-cards');
     const shortcutAddBtn = document.getElementById('shortcut-add');
+    const dndToggle = document.getElementById('dnd-toggle');
     const status = document.getElementById('status');
     const form = document.getElementById('form');
 
@@ -344,6 +396,45 @@
       shortcutAddBtn.disabled = shortcutsCardsEl.children.length >= MAX_SHORTCUTS;
     }
 
+    // ===== DND toggle =====
+    function reflectDnd(enabled) {
+      dndToggle.setAttribute('aria-pressed', String(enabled === true));
+    }
+
+    async function loadDnd() {
+      try {
+        const r = await fetch('/dnd');
+        const { enabled } = await r.json();
+        reflectDnd(enabled);
+      } catch {}
+    }
+
+    async function setDnd(enabled) {
+      dndToggle.disabled = true;
+      const prev = dndToggle.getAttribute('aria-pressed') === 'true';
+      reflectDnd(enabled);
+      try {
+        const r = await fetch('/dnd', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        });
+        if (!r.ok) throw new Error();
+      } catch {
+        reflectDnd(prev);
+      } finally {
+        dndToggle.disabled = false;
+      }
+    }
+
+    dndToggle.addEventListener('click', () => {
+      const next = dndToggle.getAttribute('aria-pressed') !== 'true';
+      setDnd(next);
+    });
+
+    const socket = io();
+    socket.on('dnd:updated', ({ enabled }) => reflectDnd(enabled));
+
     // ===== Load =====
     async function loadPeers() {
       try {
@@ -418,6 +509,7 @@
     });
 
     loadAll();
+    loadDnd();
   </script>
 </body>
 </html>

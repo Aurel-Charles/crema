@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import {
-  DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE,
+  DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE,
   MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH, MAX_SHORTCUT_TEXT, MAX_ICON_LENGTH,
   DEFAULT_REPLIES, MIN_TTL_MS, MAX_TTL_MS,
 } from './config.js';
@@ -106,11 +106,30 @@ export function findShortcut(id) {
   return shortcuts.find((s) => s.id === id) ?? null;
 }
 
+// ===== Do Not Disturb (V5.1) =====
+
+let dndEnabled = false;
+
+async function loadDnd() {
+  try {
+    const raw = await readFile(DND_FILE, 'utf8');
+    dndEnabled = JSON.parse(raw)?.enabled === true;
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('[dnd] load failed:', err.message);
+    dndEnabled = false;
+  }
+}
+
+export function getDnd() {
+  return dndEnabled;
+}
+
 // ===== Init =====
 
 export async function init({ app, io }) {
   await loadReplies();
   await loadShortcuts();
+  await loadDnd();
 
   app.get('/replies', (req, res) => res.json(replies));
   app.put('/replies', async (req, res) => {
@@ -134,5 +153,19 @@ export async function init({ app, io }) {
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  });
+
+  app.get('/dnd', (req, res) => res.json({ enabled: dndEnabled }));
+  app.put('/dnd', async (req, res) => {
+    const next = req.body?.enabled === true;
+    if (next === dndEnabled) return res.json({ enabled: dndEnabled });
+    dndEnabled = next;
+    try {
+      await persistAtomic(DND_FILE, { enabled: dndEnabled });
+    } catch (err) {
+      console.error('[dnd] persist failed:', err.message);
+    }
+    io.emit('dnd:updated', { enabled: dndEnabled });
+    res.json({ enabled: dndEnabled });
   });
 }

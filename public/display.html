@@ -43,9 +43,50 @@
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      gap: 8px;
+      gap: 10px;
       pointer-events: none;
     }
+
+    .dnd-btn {
+      pointer-events: auto;
+      position: relative;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 50%;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.2s ease, background 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .dnd-btn:active { background: rgba(244, 166, 90, 0.18); }
+    .dnd-btn .moon { width: 22px; height: 22px; transition: fill 0.2s; }
+    .dnd-btn.on { color: var(--accent); }
+    .dnd-btn.on .moon { fill: var(--accent); fill-opacity: 0.18; }
+    .dnd-btn .badge {
+      position: absolute;
+      top: -2px;
+      right: -4px;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      background: var(--accent);
+      color: var(--bg);
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .dnd-btn .badge[hidden] { display: none; }
 
     .presence {
       display: flex;
@@ -107,6 +148,14 @@
       text-transform: capitalize;
       font-weight: 400;
       transition: color 1.5s ease;
+    }
+
+    @keyframes msg-enter {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg {
+      animation: msg-enter 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
     }
 
     .msg .from {
@@ -264,6 +313,12 @@
 </head>
 <body class="night">
   <header class="topbar">
+    <button id="dnd-btn" class="dnd-btn" type="button" aria-label="Ne pas déranger">
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+      <span class="badge" hidden>0</span>
+    </button>
     <div id="presence-list"></div>
   </header>
 
@@ -280,6 +335,8 @@
     const presenceList = document.getElementById('presence-list');
     const notifEl = document.getElementById('notif');
     const shortcutsBar = document.getElementById('shortcuts-bar');
+    const dndBtn = document.getElementById('dnd-btn');
+    const dndBadge = dndBtn.querySelector('.badge');
 
     const DEFAULT_DISPLAY_MS = 30_000;
     const REPLY_DISPLAY_MS = 10_000;
@@ -287,6 +344,9 @@
     const REPLY_RETURN_DELAY_MS = 1_500;
     const NOTIF_VISIBLE_MS = 10_000;
     const REPLY_CONTEXT_MAX_CHARS = 60;
+    const QUEUE_CAP = 5;
+    const QUEUE_DRAIN_DELAY_MS = 600;
+    const NOTIF_PREVIEW_MAX_CHARS = 36;
 
     const dateFmt = new Intl.DateTimeFormat('fr-FR', {
       weekday: 'long', day: 'numeric', month: 'long',
@@ -303,6 +363,8 @@
     let replies = [];
     let shortcuts = [];
     const peers = new Map();
+    let dndEnabled = false;
+    const messageQueue = [];
 
     // ===== Time formatting =====
     function formatAgo(ms) {
@@ -351,6 +413,7 @@
       if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
       renderIdle();
       renderShortcuts();
+      maybeDrainNext();
     }
 
     function showMessage(data) {
@@ -475,6 +538,71 @@
       if (notifTimer) clearTimeout(notifTimer);
       notifTimer = setTimeout(() => notifEl.classList.remove('visible'), NOTIF_VISIBLE_MS);
     }
+
+    // ===== DND + message queue =====
+    function updateDndUI() {
+      dndBtn.classList.toggle('on', dndEnabled);
+    }
+
+    function updateBadge() {
+      const n = messageQueue.length;
+      if (n === 0) {
+        dndBadge.hidden = true;
+      } else {
+        dndBadge.hidden = false;
+        dndBadge.textContent = String(n);
+      }
+    }
+
+    function queueIncoming(data) {
+      if (messageQueue.length >= QUEUE_CAP) messageQueue.shift();
+      messageQueue.push(data);
+      updateBadge();
+      const sender = data.from ? `${data.from} : ` : '';
+      showNotif(`${sender}${truncate(data.text, NOTIF_PREVIEW_MAX_CHARS)}`);
+    }
+
+    function maybeDrainNext() {
+      if (messageQueue.length === 0 || dndEnabled || mode !== 'idle') return;
+      const next = messageQueue.shift();
+      updateBadge();
+      setTimeout(() => {
+        if (mode === 'idle' && !dndEnabled) showMessage(next);
+      }, QUEUE_DRAIN_DELAY_MS);
+    }
+
+    async function toggleDnd() {
+      const next = !dndEnabled;
+      try {
+        const r = await fetch('/dnd', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: next }),
+        });
+        if (!r.ok) throw new Error();
+        // Optimistic flip — dnd:updated will reconfirm shortly.
+        dndEnabled = next;
+        updateDndUI();
+        if (!dndEnabled) maybeDrainNext();
+      } catch {
+        showNotif('Impossible de modifier le mode');
+      }
+    }
+
+    dndBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDnd();
+    });
+
+    async function loadDnd() {
+      try {
+        const r = await fetch('/dnd');
+        const data = await r.json();
+        dndEnabled = data.enabled === true;
+        updateDndUI();
+      } catch {}
+    }
+    loadDnd();
 
     // ===== Reply handling + tap-to-dismiss =====
     screen.addEventListener('click', async (e) => {
@@ -662,14 +790,25 @@
     });
 
     socket.on('message', (data) => {
-      if (data && typeof data.text === 'string' && data.text.trim()) {
+      if (!data || typeof data.text !== 'string' || !data.text.trim()) return;
+      // Hold the message back if we're already showing one or DND is on.
+      // It'll be drained later from the queue.
+      if (mode === 'message' || dndEnabled) {
+        queueIncoming(data);
+      } else {
         showMessage(data);
       }
     });
 
     socket.on('msg:expired', ({ text, targetOwner }) => {
-      const truncated = text.length > 40 ? text.slice(0, 40) + '…' : text;
-      showNotif(`« ${truncated} » sans réponse de ${targetOwner}`);
+      showNotif(`« ${truncate(text, 40)} » sans réponse de ${targetOwner}`);
+    });
+
+    socket.on('dnd:updated', ({ enabled }) => {
+      const was = dndEnabled;
+      dndEnabled = enabled === true;
+      updateDndUI();
+      if (was && !dndEnabled) maybeDrainNext();
     });
   </script>
 </body>
