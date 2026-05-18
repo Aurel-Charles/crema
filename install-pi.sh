@@ -64,6 +64,11 @@ fi
 echo "▸ Installing Noto Color Emoji font"
 sudo apt install -y fonts-noto-color-emoji || true
 
+# 5. Build tools for native npm modules (better-sqlite3 has no armv7 prebuild,
+#    so on 32-bit Pi OS it compiles from source on `npm install`).
+echo "▸ Installing build tools for native npm modules"
+sudo apt install -y build-essential python3 || true
+
 echo
 echo "✓ Installed."
 echo "  • Server status : sudo systemctl status crema"

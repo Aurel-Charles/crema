@@ -27,6 +27,7 @@ export const DATA_DIR = join(__dirname, 'data');
 export const REPLIES_FILE = join(DATA_DIR, 'replies.json');
 export const SHORTCUTS_FILE = join(DATA_DIR, 'shortcuts.json');
 export const DND_FILE = join(DATA_DIR, 'dnd.json');
+export const HISTORY_DB_FILE = join(DATA_DIR, 'history.db');
 export const PUBLIC_DIR = join(__dirname, 'public');
 
 export const MAX_REPLIES = 5;

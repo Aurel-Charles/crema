@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { INSTANCE_ID, OWNER, MAX_LABEL_LENGTH, MAX_REPLIES } from './config.js';
 import { clampTtl, findShortcut } from './store.js';
 import { findPeerByInstanceId, findPeerByOwner, resolveHost } from './peers.js';
+import * as db from './db.js';
 
 // When /send succeeds, the message is kept here until either:
 //   - the peer replies (we get a /inbox hit with replyToMsgId), or
@@ -44,6 +45,7 @@ function trackPending({ id, text, targetOwner, expiresAt, io }) {
     pendingMessages.delete(id);
     console.log(`[pending] expired without reply → ${targetOwner}: ${text.slice(0, 30)}`);
     io.emit('msg:expired', { id, text, targetOwner });
+    db.setStatus(id, 'expired');
   }, Math.max(0, ttl));
   pendingMessages.set(id, { text, targetOwner, expiresAt, timer });
 }
@@ -74,7 +76,18 @@ async function sendToPeer(peer, { text, ttlMs, responseOptions = null, io }) {
     await postInbox(fresh, peer.port, payload);
   }
 
-  trackPending({ id, text, targetOwner: peer.owner, expiresAt: Date.parse(expiresAt), io });
+  const expiresAtMs = Date.parse(expiresAt);
+  trackPending({ id, text, targetOwner: peer.owner, expiresAt: expiresAtMs, io });
+  db.insertMessage({
+    id,
+    direction: 'out',
+    text,
+    from: OWNER,
+    to: peer.owner,
+    expiresAt: expiresAtMs,
+    responseOptions: opts,
+    status: 'pending',
+  });
   return { id, expiresAt };
 }
 
@@ -137,21 +150,38 @@ export function init({ app, io }) {
       replyToMsgId,
     };
 
+    let delivered = false;
     try {
       await postInbox(peer.address, peer.port, payload);
-      return res.json({ ok: true });
+      delivered = true;
     } catch (err1) {
       console.warn(`[reply] retry → ${peer.owner} (${err1.message})`);
       try {
         const fresh = await resolveHost(peer.host);
         peer.address = fresh;
         await postInbox(fresh, peer.port, payload);
-        return res.json({ ok: true });
+        delivered = true;
       } catch (err2) {
         console.error(`[reply] failed → ${peer.owner}:`, err2.message);
         return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
       }
     }
+
+    if (delivered) {
+      const original = replyToMsgId ? db.getMessage(replyToMsgId) : null;
+      db.insertMessage({
+        id: randomUUID(),
+        direction: 'out',
+        text: label,
+        from: OWNER,
+        to: peer.owner,
+        isReply: true,
+        replyToMsgId,
+        replyToText: original?.text ?? null,
+        status: 'sent',
+      });
+    }
+    return res.json({ ok: true });
   });
 
   app.post('/inbox', (req, res) => {
@@ -167,11 +197,34 @@ export function init({ app, io }) {
 
     // If this is a reply to one of our own pending messages, clear its expiry
     // timer and grab the original text so we can show context on the display.
+    // Fall back to DB if pending state was lost (e.g. server restart).
     let replyToText = null;
     if (isReply && replyToMsgId) {
       const original = resolvePending(replyToMsgId);
-      if (original) replyToText = original.text;
+      if (original) {
+        replyToText = original.text;
+      } else {
+        const stored = db.getMessage(replyToMsgId);
+        if (stored) replyToText = stored.text;
+      }
+      db.setStatus(replyToMsgId, 'replied');
     }
+
+    const opts = responseOptions.length > 0 ? responseOptions : null;
+    const rowId = id ?? randomUUID();
+    db.insertMessage({
+      id: rowId,
+      direction: 'in',
+      text,
+      from,
+      to: OWNER,
+      expiresAt: expiresAt ? Date.parse(expiresAt) : null,
+      isReply,
+      replyToMsgId,
+      replyToText,
+      responseOptions: opts,
+      status: 'received',
+    });
 
     io.emit('message', {
       id,
@@ -181,7 +234,7 @@ export function init({ app, io }) {
       isReply,
       expiresAt,
       replyToText,
-      responseOptions: responseOptions.length > 0 ? responseOptions : null,
+      responseOptions: opts,
     });
     res.json({ ok: true });
   });

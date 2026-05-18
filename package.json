@@ -1,13 +1,14 @@
 {
   "name": "crema",
-  "version": "0.5.1",
-  "description": "Pi messenger — V5.1 DND mode + message queue + reply polish",
+  "version": "0.6.0",
+  "description": "Pi messenger — V6.0 conversation history (SQLite)",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "better-sqlite3": "^11.5.0",
     "express": "^4.21.2",
     "mdns": "^2.7.2",
     "socket.io": "^4.8.1",
