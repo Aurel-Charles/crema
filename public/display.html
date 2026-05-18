@@ -449,6 +449,12 @@
       resetTimer = setTimeout(showIdle, ttl);
 
       if (expiresAtMs) startProgressAnimation(ttl);
+
+      // Tell the original sender we just displayed their message (V6.1).
+      // Replies don't carry an id over the wire, skip them.
+      if (data.id && data.fromInstanceId && !data.isReply) {
+        socket.emit('msg:read', { id: data.id, fromInstanceId: data.fromInstanceId });
+      }
     }
 
     function renderMessage() {

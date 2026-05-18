@@ -37,6 +37,9 @@ export function init() {
     )
   `);
   stmts.updateStatus = db.prepare('UPDATE messages SET status = ? WHERE id = ?');
+  stmts.updateStatusIfPending = db.prepare(
+    "UPDATE messages SET status = ? WHERE id = ? AND status = 'pending'"
+  );
   stmts.getById = db.prepare('SELECT * FROM messages WHERE id = ?');
   stmts.listRecent = db.prepare('SELECT * FROM messages ORDER BY created_at DESC LIMIT ?');
 }
@@ -99,6 +102,12 @@ export function insertMessage({
 
 export function setStatus(id, status) {
   stmts.updateStatus.run(status, id);
+}
+
+// Use for transitions that should not overwrite a terminal state
+// ('replied', 'expired'). Currently used for 'pending' → 'read'.
+export function setStatusIfPending(id, status) {
+  stmts.updateStatusIfPending.run(status, id);
 }
 
 export function getMessage(id) {

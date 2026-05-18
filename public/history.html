@@ -112,6 +112,7 @@
       font-weight: 600;
     }
     .status-pending  { background: #ebebef; color: #6b6b70; }
+    .status-read     { background: rgba(244, 166, 90, 0.22); color: #8a5a14; }
     .status-replied  { background: #e3f3e1; color: #2d7a3a; }
     .status-expired  { background: #f7e6e1; color: #b3261e; }
 
@@ -182,6 +183,7 @@
     <div class="loading">Chargement…</div>
   </main>
 
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js').catch(() => {});
@@ -220,6 +222,7 @@
     function statusLabel(status) {
       switch (status) {
         case 'pending':  return { label: 'en attente', cls: 'status-pending' };
+        case 'read':     return { label: 'vu',         cls: 'status-read' };
         case 'replied':  return { label: 'répondu',    cls: 'status-replied' };
         case 'expired':  return { label: 'expiré',     cls: 'status-expired' };
         default:         return null;  // sent, received → no badge
@@ -247,7 +250,7 @@
         msg.isReply ? 'is-reply' : '',
       ].filter(Boolean).join(' ');
       return `
-        <article class="${classes}">
+        <article class="${classes}" data-id="${esc(msg.id)}">
           <div class="msg-meta">
             <span class="arrow">${arrow}</span>
             <span class="person">${esc(person)}</span>
@@ -287,6 +290,23 @@
     }
 
     load();
+
+    // ===== Live updates =====
+    // Surgically swap the badge when a sent message gets read by the peer.
+    // Only updates rows currently rendered; if you load the page later, the
+    // initial fetch already reflects the read state from DB.
+    const socket = io();
+    socket.on('msg:read', ({ id }) => {
+      if (!id) return;
+      const card = mainEl.querySelector(`[data-id="${id}"]`);
+      if (!card) return;
+      const statusEl = card.querySelector('.status');
+      // Only override 'pending' — don't downgrade replied/expired.
+      if (!statusEl || !statusEl.classList.contains('status-pending')) return;
+      statusEl.className = 'status status-read';
+      statusEl.textContent = 'vu';
+    });
+  </script>
   </script>
 </body>
 </html>

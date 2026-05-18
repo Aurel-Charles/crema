@@ -238,4 +238,39 @@ export function init({ app, io }) {
     });
     res.json({ ok: true });
   });
+
+  // ===== Read receipts (V6.1) =====
+
+  // Incoming: a peer notifies us that one of our outgoing messages was just
+  // displayed on their screen. Mark it 'read' in our DB (only if still
+  // 'pending' — don't overwrite 'replied' or 'expired') and let the PWA
+  // history page update live.
+  app.post('/read-receipt', (req, res) => {
+    const id = typeof req.body?.id === 'string' ? req.body.id : '';
+    if (!id) return res.status(400).json({ error: 'id manquant' });
+    db.setStatusIfPending(id, 'read');
+    io.emit('msg:read', { id });
+    res.json({ ok: true });
+  });
+
+  // Outgoing: our display tells us it just showed a message. Forward the
+  // receipt to the original sender's /read-receipt endpoint. Best-effort —
+  // if the peer is offline or the request fails, we silently drop it.
+  io.on('connection', (socket) => {
+    socket.on('msg:read', async ({ id, fromInstanceId } = {}) => {
+      if (!id || !fromInstanceId) return;
+      const peer = findPeerByInstanceId(fromInstanceId);
+      if (!peer) return;
+      try {
+        await fetch(`http://${peer.address}:${peer.port}/read-receipt`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch (err) {
+        console.warn(`[read-receipt] failed → ${peer.owner}: ${err.message}`);
+      }
+    });
+  });
 }
