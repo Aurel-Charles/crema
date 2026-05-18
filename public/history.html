@@ -79,41 +79,52 @@
       flex-direction: column;
       gap: 6px;
     }
-    .msg-card.msg-out { border-left: 3px solid var(--crema-text); }
-    .msg-card.msg-in  { border-left: 3px solid var(--crema-accent); }
     .msg-card.expired { opacity: 0.6; }
 
     .msg-meta {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       font-size: 13px;
       color: var(--crema-muted);
       font-variant-numeric: tabular-nums;
     }
-    .msg-meta .arrow {
+    /* Direction by typography — A → F (mono, both initials equal weight) */
+    .msg-meta .direction {
+      font-family: var(--crema-font-mono);
       font-weight: 700;
       color: var(--crema-text);
+      letter-spacing: 0.05em;
     }
-    .msg-in .msg-meta .arrow { color: var(--crema-accent); }
-    .msg-meta .person {
-      color: var(--crema-text);
-      font-weight: 600;
+    .msg-meta .direction .arrow {
+      color: var(--crema-muted);
+      font-weight: 400;
+      margin: 0 3px;
     }
     .msg-meta .time { color: var(--crema-muted); }
     .msg-meta .status {
       margin-left: auto;
       font-size: 11px;
-      padding: 2px 8px;
+      padding: 2px 9px;
       border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      line-height: 1.5;
+    }
+    /* Only "en attente" wears the attention gold — design rule */
+    .status-pending {
+      background: var(--crema-attention);
+      color: var(--crema-accent-ink);
       font-weight: 600;
     }
-    .status-pending  { background: var(--crema-stroke-faint); color: var(--crema-muted); }
-    .status-read     { background: rgba(168, 196, 156, 0.22); color: #8a5a14; }
-    .status-replied  { background: #e3f3e1; color: #2d7a3a; }
-    .status-expired  { background: var(--crema-danger-bg); color: var(--crema-danger); }
+    /* Read / replied / expired all neutral: stroke pill + mono lowercase */
+    .status-read,
+    .status-replied,
+    .status-expired {
+      background: transparent;
+      border: 1px solid var(--crema-stroke);
+      color: var(--crema-muted);
+      font-family: var(--crema-font-mono);
+      font-weight: 500;
+    }
 
     .reply-context {
       font-size: 13px;
@@ -228,10 +239,18 @@
       }
     }
 
+    function initial(name) {
+      return (name ?? '?').charAt(0).toUpperCase();
+    }
+
     function renderMessage(msg, myOwner) {
       const time = timeFmt.format(new Date(msg.createdAt));
-      const arrow = msg.direction === 'out' ? '→' : '←';
-      const person = msg.direction === 'out' ? (msg.to ?? '?') : msg.from;
+      // Direction by typography: A → F means A sent to F.
+      const fromName = msg.direction === 'out' ? myOwner : msg.from;
+      const toName   = msg.direction === 'out' ? msg.to   : myOwner;
+      const fromTitle = fromName ?? '?';
+      const toTitle   = toName ?? '?';
+      const directionHtml = `<span class="direction" title="${esc(fromTitle)} → ${esc(toTitle)}">${esc(initial(fromName))}<span class="arrow">→</span>${esc(initial(toName))}</span>`;
       const status = statusLabel(msg.status);
       const statusHtml = status
         ? `<span class="status ${status.cls}">${status.label}</span>`
@@ -251,8 +270,7 @@
       return `
         <article class="${classes}" data-id="${esc(msg.id)}">
           <div class="msg-meta">
-            <span class="arrow">${arrow}</span>
-            <span class="person">${esc(person)}</span>
+            ${directionHtml}
             <span class="time">${time}</span>
             ${statusHtml}
           </div>
