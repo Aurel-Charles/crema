@@ -43,10 +43,10 @@
       letter-spacing: -0.02em;
     }
     .me {
-      font-size: 13px;
+      font-size: 11px;
       color: var(--crema-muted);
     }
-    .me strong { color: var(--crema-text); font-weight: 600; }
+    .me strong { color: var(--crema-text); }
     .header-actions {
       display: flex;
       align-items: center;
@@ -74,19 +74,19 @@
       gap: 16px;
     }
 
+    /* Section labels reuse the .crema-label utility (uppercase, 0.25em
+     * kerned) — same typographic signature as day headers in /history. */
     label {
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      font-size: 11px;
       color: var(--crema-muted);
     }
     label .optional {
+      font-family: var(--crema-font-sans);
       font-weight: 400;
       text-transform: none;
       letter-spacing: 0;
       color: var(--crema-muted);
-      margin-left: 4px;
+      margin-left: 6px;
     }
 
     .field {
@@ -126,6 +126,49 @@
       box-shadow: 0 0 0 3px rgba(168, 196, 156, 0.2);
     }
     select:disabled, textarea:disabled { opacity: 0.5; }
+    select[hidden] { display: none; }
+
+    /* ===== Peer picker (segmented, 1–4 peers) =====
+     * Initial in mono echoes the A→F direction marker in /history. */
+    .peer-picker {
+      display: flex;
+      gap: 8px;
+    }
+    .peer-picker[hidden] { display: none; }
+    .peer-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 14px 8px;
+      min-height: 72px;
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
+      border-radius: 14px;
+      color: var(--crema-text);
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .peer-btn .initial {
+      font-family: var(--crema-font-mono);
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .peer-btn .owner {
+      font-size: 13px;
+      color: var(--crema-muted);
+    }
+    .peer-btn.active {
+      background: var(--crema-accent);
+      border-color: var(--crema-accent);
+      color: var(--crema-accent-ink);
+    }
+    .peer-btn.active .owner { color: var(--crema-accent-ink); }
+    .peer-btn:active { transform: scale(0.97); }
 
     /* Chips (response options) */
     .chips {
@@ -175,7 +218,7 @@
     }
     .chip-add input:focus {
       border-color: var(--crema-accent);
-      box-shadow: 0 0 0 3px rgba(244,166,90,0.2);
+      box-shadow: 0 0 0 3px rgba(168, 196, 156, 0.2);
     }
     .chip-add button {
       width: 44px;
@@ -208,8 +251,9 @@
       transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
     .preset.active {
-      background: rgba(244,166,90,0.15);
+      background: var(--crema-accent);
       border-color: var(--crema-accent);
+      color: var(--crema-accent-ink);
     }
     .preset:active { transform: scale(0.97); }
 
@@ -234,16 +278,17 @@
     }
     .custom-row input:focus {
       border-color: var(--crema-accent);
-      box-shadow: 0 0 0 3px rgba(244,166,90,0.2);
+      box-shadow: 0 0 0 3px rgba(168, 196, 156, 0.2);
     }
 
+    /* Send is THE primary action → wears the living sage. */
     .send-btn {
       padding: 16px;
       font-size: 17px;
       font-weight: 600;
       font-family: inherit;
-      color: var(--crema-surface);
-      background: var(--crema-text);
+      color: var(--crema-accent-ink);
+      background: var(--crema-accent);
       border: none;
       border-radius: 14px;
       cursor: pointer;
@@ -259,7 +304,7 @@
       text-align: center;
       color: var(--crema-muted);
     }
-    .status.ok { color: #2d7a3a; }
+    .status.ok { color: var(--crema-accent-ink); font-weight: 600; }
     .status.err { color: var(--crema-danger); }
   </style>
 </head>
@@ -292,19 +337,20 @@
 
   <form id="form">
     <div class="field">
-      <label for="target">Destinataire</label>
+      <label for="target" class="crema-label">Destinataire</label>
+      <div class="peer-picker" id="peer-picker" hidden></div>
       <select id="target" required>
         <option value="">Recherche…</option>
       </select>
     </div>
 
     <div class="field">
-      <label for="text">Message</label>
+      <label for="text" class="crema-label">Message</label>
       <textarea id="text" placeholder="Ton message…" autocomplete="off" required></textarea>
     </div>
 
     <div class="field">
-      <label>Options de réponse <span class="optional">(facultatif)</span></label>
+      <label class="crema-label">Options de réponse <span class="optional">(facultatif)</span></label>
       <div class="chips" id="chips"></div>
       <div class="chip-add">
         <input id="chip-input" type="text" placeholder="Ex: Oui" maxlength="30" />
@@ -313,7 +359,7 @@
     </div>
 
     <div class="field">
-      <label>Disponible</label>
+      <label class="crema-label">Disponible</label>
       <div class="presets" id="presets">
         <button type="button" class="preset" data-preset="30s">30 s</button>
         <button type="button" class="preset" data-preset="5min">5 min</button>
@@ -342,8 +388,10 @@
     const MAX_OPTIONS = 5;
     const TYPING_THROTTLE_MS = 3000;  // resend 'start' at most every 3 s
     const TYPING_IDLE_MS = 3500;       // 'stop' after this much keyboard silence
+    const SEGMENTED_MAX = 4;  // beyond this, fall back to <select> (visual clarity).
     const meLabel = document.getElementById('me-label');
     const targetSel = document.getElementById('target');
+    const peerPicker = document.getElementById('peer-picker');
     const textEl = document.getElementById('text');
     const sendBtn = document.getElementById('send');
     const status = document.getElementById('status');
@@ -507,23 +555,68 @@
       }
     }
 
+    function renderPeerPicker() {
+      // Highlight the currently selected peer (mirrors targetSel.value).
+      const current = targetSel.value;
+      peerPicker.innerHTML = peers.map((p) => `
+        <button type="button" class="peer-btn ${p.instanceId === current ? 'active' : ''}"
+                data-instance-id="${escapeHtml(p.instanceId)}">
+          <span class="initial">${escapeHtml(p.owner.charAt(0).toUpperCase())}</span>
+          <span class="owner">${escapeHtml(p.owner)}</span>
+        </button>
+      `).join('');
+    }
+
+    peerPicker.addEventListener('click', (e) => {
+      const btn = e.target.closest('.peer-btn');
+      if (!btn) return;
+      const id = btn.dataset.instanceId;
+      if (!id || id === targetSel.value) return;
+      targetSel.value = id;
+      renderPeerPicker();
+      // The submit + typing paths already read targetSel.value, so keeping
+      // the <select> as source of truth means we don't need to retrofit them.
+    });
+
     async function loadPeers() {
       try {
         const r = await fetch('/peers');
         peers = await r.json();
         const prev = targetSel.value;
+
         if (peers.length === 0) {
           targetSel.innerHTML = '<option value="">Aucun destinataire</option>';
+          targetSel.hidden = false;
+          peerPicker.hidden = true;
+          peerPicker.innerHTML = '';
           sendBtn.disabled = true;
-        } else {
-          targetSel.innerHTML = peers
-            .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(p.owner)}</option>`)
-            .join('');
-          if (peers.find((p) => p.instanceId === prev)) targetSel.value = prev;
-          sendBtn.disabled = false;
+          return;
         }
+
+        // Repopulate <select> regardless — it stays the source of truth
+        // for value / form submission, even when hidden.
+        targetSel.innerHTML = peers
+          .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(p.owner)}</option>`)
+          .join('');
+        targetSel.value = peers.find((p) => p.instanceId === prev)
+          ? prev
+          : peers[0].instanceId;
+
+        if (peers.length <= SEGMENTED_MAX) {
+          peerPicker.hidden = false;
+          targetSel.hidden = true;
+          renderPeerPicker();
+        } else {
+          peerPicker.hidden = true;
+          peerPicker.innerHTML = '';
+          targetSel.hidden = false;
+        }
+        sendBtn.disabled = false;
       } catch {
         targetSel.innerHTML = '<option value="">Erreur réseau</option>';
+        targetSel.hidden = false;
+        peerPicker.hidden = true;
+        peerPicker.innerHTML = '';
         sendBtn.disabled = true;
       }
     }
