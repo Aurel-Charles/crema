@@ -292,19 +292,38 @@
     load();
 
     // ===== Live updates =====
-    // Surgically swap the badge when a sent message gets read by the peer.
-    // Only updates rows currently rendered; if you load the page later, the
-    // initial fetch already reflects the read state from DB.
+    // Two complementary signals from the server:
+    //  - msg:status: an existing message's status changed → swap the badge
+    //    in place (cheap, no flicker).
+    //  - history:new: a new message was inserted in DB → refetch + re-render
+    //    (debounced so a burst of inserts only fires one fetch).
     const socket = io();
-    socket.on('msg:read', ({ id }) => {
-      if (!id) return;
+
+    let refetchTimer = null;
+    function scheduleRefetch() {
+      if (refetchTimer) clearTimeout(refetchTimer);
+      refetchTimer = setTimeout(() => {
+        refetchTimer = null;
+        load();
+      }, 250);
+    }
+
+    socket.on('history:new', scheduleRefetch);
+
+    socket.on('msg:status', ({ id, status }) => {
+      if (!id || !status) return;
       const card = mainEl.querySelector(`[data-id="${id}"]`);
       if (!card) return;
       const statusEl = card.querySelector('.status');
-      // Only override 'pending' — don't downgrade replied/expired.
-      if (!statusEl || !statusEl.classList.contains('status-pending')) return;
-      statusEl.className = 'status status-read';
-      statusEl.textContent = 'vu';
+      if (!statusEl) return;
+      // Don't downgrade a terminal state (replied / expired) with 'read'.
+      if (status === 'read' && !statusEl.classList.contains('status-pending')) return;
+      const next = statusLabel(status);
+      if (!next) return;
+      statusEl.className = `status ${next.cls}`;
+      statusEl.textContent = next.label;
+      // The expired status also greys out the card.
+      if (status === 'expired') card.classList.add('expired');
     });
   </script>
   </script>

@@ -46,6 +46,7 @@ function trackPending({ id, text, targetOwner, expiresAt, io }) {
     console.log(`[pending] expired without reply → ${targetOwner}: ${text.slice(0, 30)}`);
     io.emit('msg:expired', { id, text, targetOwner });
     db.setStatus(id, 'expired');
+    io.emit('msg:status', { id, status: 'expired' });
   }, Math.max(0, ttl));
   pendingMessages.set(id, { text, targetOwner, expiresAt, timer });
 }
@@ -88,6 +89,7 @@ async function sendToPeer(peer, { text, ttlMs, responseOptions = null, io }) {
     responseOptions: opts,
     status: 'pending',
   });
+  io.emit('history:new');
   return { id, expiresAt };
 }
 
@@ -180,6 +182,7 @@ export function init({ app, io }) {
         replyToText: original?.text ?? null,
         status: 'sent',
       });
+      io.emit('history:new');
     }
     return res.json({ ok: true });
   });
@@ -208,6 +211,7 @@ export function init({ app, io }) {
         if (stored) replyToText = stored.text;
       }
       db.setStatus(replyToMsgId, 'replied');
+      io.emit('msg:status', { id: replyToMsgId, status: 'replied' });
     }
 
     const opts = responseOptions.length > 0 ? responseOptions : null;
@@ -225,6 +229,7 @@ export function init({ app, io }) {
       responseOptions: opts,
       status: 'received',
     });
+    io.emit('history:new');
 
     io.emit('message', {
       id,
@@ -249,7 +254,7 @@ export function init({ app, io }) {
     const id = typeof req.body?.id === 'string' ? req.body.id : '';
     if (!id) return res.status(400).json({ error: 'id manquant' });
     db.setStatusIfPending(id, 'read');
-    io.emit('msg:read', { id });
+    io.emit('msg:status', { id, status: 'read' });
     res.json({ ok: true });
   });
 
