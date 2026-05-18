@@ -9,7 +9,7 @@ in idle as an ambient sage clock with day/night theming, shows who else is
 online on the LAN, and exposes its configured shortcuts at the bottom of the
 screen.
 
-**Current version:** [v6.2.0](https://github.com/Aurel-Charles/crema/releases/tag/v6.2.0)
+**Current version:** [v6.4.0](https://github.com/Aurel-Charles/crema/releases/tag/v6.4.0)
 — see [CLAUDE.md](./CLAUDE.md) for the full project spec and roadmap.
 
 ## What works today
@@ -81,6 +81,16 @@ screen.
   toward this Pi, the presence row in the display swaps `en ligne` for
   `écrit…` with subtle bouncing dots. Throttled on send (max one event
   every 3 s), auto-cleared after 5 s of silence on the receiving side.
+- **Activity log (V6.3)** — every notable event (peer up/down, message
+  sent / received / expired, replies, DND toggles, errors) is journaled
+  to a structured `events` table in SQLite and surfaced via the
+  activity-pulse icon in the PWA header. `/logs` shows a live,
+  filterable timeline (`Tous / Peers / Messages / Système / Erreurs`)
+  grouped by day, with category-tinted badges and surgical socket
+  updates. Manual "Nettoyer > 7 jours" prunes old entries.
+- **Direction Sauge (V6.4)** — full visual rework across the five
+  surfaces (palette foundation, PWA history, PWA send, display idle,
+  display message). See the [Design](#design) section for the system.
 - **Send reliability** — retry with hostname re-resolution on transient
   avahi flakiness; stale peers dropped immediately when a new instance
   announces under the same owner; mDNS shutdown grace so the "bye" packet
@@ -263,12 +273,16 @@ store.js               atomic JSON persistence for replies, shortcuts, DND + the
 messaging.js           pendingMessages, sendToPeer, /send /shortcut/send /reply /inbox,
                        /read-receipt, /typing, msg:status + history:new broadcasts
 db.js                  SQLite history (better-sqlite3, WAL): insert/update/group-by-day
+logger.js              structured event log: writes to events table, mirrors to
+                       stdout, broadcasts 'event:new' over Socket.IO
 public/
   index.html           PWA sender (target / message / response options / TTL / typing)
   settings.html        PWA Préférences (DND toggle + replies + shortcuts editor)
   history.html         PWA history page (grouped by day, live status updates)
+  logs.html            PWA activity log (filterable timeline grouped by day, live)
   display.html         Pi kiosk (clock, message, queue, DND moon, replies, shortcuts,
                        presence + typing indicator)
+  theme.css            Direction Sauge palette + .crema-label utility (single source of truth)
   manifest.json        PWA manifest
   service-worker.js    minimal SW to enable PWA install
   icon.svg
