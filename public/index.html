@@ -122,8 +122,18 @@
       max-height: 320px;
       resize: none;
       padding: 16px;
-      font-size: 18px;
+      font-family: var(--crema-font-serif);
+      font-size: 19px;
+      font-weight: 400;
+      line-height: 1.35;
+      letter-spacing: -0.005em;
       overflow-y: auto;
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.13),
+                  0 8px 24px -10px rgba(196, 101, 156, 0.18);
+    }
+    textarea:focus {
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.28),
+                  0 12px 28px -10px rgba(196, 101, 156, 0.30);
     }
     select:focus, textarea:focus {
       border-color: var(--crema-accent);
@@ -285,22 +295,45 @@
       box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.2);
     }
 
-    /* Send is THE primary action → wears the living sage. */
+    /* Send = primary action → gradient sunset (corail → magenta → lavande)
+     * en Instrument Serif italique, "envoyer →" en lowercase pour matcher
+     * l'esprit Mirage du design Currents. */
     .send-btn {
-      padding: 16px;
-      font-size: 17px;
-      font-weight: 600;
-      font-family: inherit;
-      color: var(--crema-accent-ink);
-      background: var(--crema-accent);
+      position: relative;
+      padding: 18px;
+      font-family: var(--crema-font-serif);
+      font-style: italic;
+      font-size: 20px;
+      font-weight: 400;
+      letter-spacing: 0.01em;
+      text-transform: lowercase;
+      color: #FFFFFF;
+      background: linear-gradient(90deg,
+        var(--band-1) 0%, var(--band-7) 50%, var(--band-6) 100%);
       border: none;
-      border-radius: 14px;
+      border-radius: 16px;
       cursor: pointer;
-      transition: opacity 0.15s, transform 0.05s;
+      box-shadow: 0 12px 28px -10px rgba(196, 101, 156, 0.45);
+      transition: opacity 0.15s, transform 0.05s, box-shadow 0.2s;
       margin-top: auto;
     }
-    .send-btn:active { transform: scale(0.98); }
-    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .send-btn::after {
+      content: " →";
+      font-family: var(--crema-font-sans);
+      font-style: normal;
+      font-weight: 300;
+      font-size: 22px;
+      margin-left: 8px;
+    }
+    .send-btn:active {
+      transform: scale(0.98);
+      box-shadow: 0 6px 16px -6px rgba(196, 101, 156, 0.55);
+    }
+    .send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
 
     .status {
       min-height: 20px;

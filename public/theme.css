@@ -110,9 +110,44 @@ body.crema-display {
   letter-spacing: 0.05em;
 }
 
-/* ===== Signature visuelle — onde rainbow ===== */
-/* Bande rainbow fine en bas de chaque écran Display. Subtile mais
- * reconnaissable, c'est le "crema" qui devient onde. */
+/* ===== Currents ripple — la signature visuelle de Mirage =====
+ * 12 ellipses concentriques pincées (pinch ~6:1), palette palindrome
+ * band-1 → band-7 → band-2, centrées légèrement bas-gauche. Reproduit
+ * l'onde "Currents" de Tame Impala en pur CSS via radial-gradient.
+ * Fixed → couvre le viewport, pointer-events: none → invisible aux taps. */
+body.crema-display::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.62;
+  filter: blur(0.4px);
+  background-color: transparent;
+  background-image:
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 14.5%, rgba(232,137,110,0.55) 15% 15.3%, transparent 15.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 21.5%, rgba(232,178,94,0.50)  22% 22.3%, transparent 22.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 28.5%, rgba(217,210,119,0.45) 29% 29.3%, transparent 29.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 35.5%, rgba(125,192,176,0.45) 36% 36.3%, transparent 36.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 42.5%, rgba(111,155,209,0.45) 43% 43.3%, transparent 43.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 49.5%, rgba(166,133,201,0.45) 50% 50.3%, transparent 50.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 56.5%, rgba(196,111,161,0.45) 57% 57.3%, transparent 57.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 63.5%, rgba(166,133,201,0.40) 64% 64.3%, transparent 64.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 70.5%, rgba(111,155,209,0.38) 71% 71.3%, transparent 71.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 77.5%, rgba(125,192,176,0.35) 78% 78.3%, transparent 78.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 84.5%, rgba(217,210,119,0.30) 85% 85.3%, transparent 85.8% 100%),
+    radial-gradient(ellipse 110vw 28vh at 30% 65%, transparent 0 91.5%, rgba(232,178,94,0.28)  92% 92.3%, transparent 92.8% 100%);
+}
+
+/* Quand un message est à l'écran, l'onde monte en intensité */
+body.crema-display:has(#screen.msg)::before {
+  opacity: 0.82;
+}
+
+/* ===== Signature ::after — rainbow stripe (idle) / plinth + stripe (msg) =====
+ * En idle : bande rainbow fine 3px tout en bas.
+ * En msg : plinth indigo qui monte sur 100px, rainbow stripe à la toute fin.
+ * Le plinth crée le contraste pour que les reply-btn colorés ressortent. */
 body.crema-display::after {
   content: "";
   position: fixed;
@@ -122,6 +157,142 @@ body.crema-display::after {
   height: 3px;
   background: var(--crema-rainbow);
   pointer-events: none;
-  z-index: 100;
+  z-index: 50;
   opacity: 0.85;
+  transition: height 0.4s ease, background 0.4s ease;
+}
+body.crema-display:has(#screen.msg)::after {
+  height: 110px;
+  background:
+    linear-gradient(180deg, transparent 0%, var(--crema-plinth, #2A1F44) 100%),
+    var(--crema-rainbow);
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, 100% 3px;
+  background-position: 0 0, 0 100%;
+  opacity: 1;
+}
+
+/* Reply-bar doit rester au-dessus du plinth — on lui donne un z stack frais. */
+.reply-bar {
+  position: relative;
+  z-index: 60;
+}
+
+/* ===== Sun disc — visible uniquement en idle =====
+ * Un soleil pâle radial qui flotte au-dessus de l'horloge. */
+#screen {
+  position: relative;
+}
+#screen.idle::before {
+  content: "";
+  position: absolute;
+  top: -22%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(80px, 14vw, 130px);
+  height: clamp(80px, 14vw, 130px);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--band-2) 0%, var(--band-1) 60%, transparent 100%);
+  opacity: 0.55;
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ===== WaveLine — sinus corail flanquant la date en idle ===== */
+.idle .date {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.idle .date::before,
+.idle .date::after {
+  content: "";
+  display: inline-block;
+  width: 64px;
+  height: 10px;
+  flex-shrink: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 10' fill='none' stroke='%23E8896E' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M 0 5 Q 4 1 8 5 T 16 5 T 24 5 T 32 5 T 40 5 T 48 5 T 56 5 T 64 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* ===== Per-band reply buttons — chaque bouton porte une bande différente ===== */
+.reply-btn:nth-child(7n+1) { --rb: var(--band-4); }  /* menthe — Oui */
+.reply-btn:nth-child(7n+2) { --rb: var(--band-1); }  /* corail — Non */
+.reply-btn:nth-child(7n+3) { --rb: var(--band-2); }  /* ambre — J'y vais */
+.reply-btn:nth-child(7n+4) { --rb: var(--band-6); }
+.reply-btn:nth-child(7n+5) { --rb: var(--band-3); }
+.reply-btn:nth-child(7n+6) { --rb: var(--band-5); }
+.reply-btn:nth-child(7n+7) { --rb: var(--band-7); }
+body.crema-display .reply-btn {
+  background: color-mix(in srgb, var(--rb, var(--crema-accent)) 14%, transparent);
+  border-color: var(--rb, var(--crema-accent));
+  color: #FFFFFF;
+  box-shadow: 0 0 24px color-mix(in srgb, var(--rb, var(--crema-accent)) 35%, transparent);
+}
+body.crema-display .reply-btn:active {
+  background: color-mix(in srgb, var(--rb, var(--crema-accent)) 28%, transparent);
+}
+
+/* ===== Per-band shortcut buttons — pills colorées sur fond glassy ===== */
+.shortcut-btn:nth-child(7n+1) { --sb: var(--band-1); }
+.shortcut-btn:nth-child(7n+2) { --sb: var(--band-5); }
+.shortcut-btn:nth-child(7n+3) { --sb: var(--band-6); }
+.shortcut-btn:nth-child(7n+4) { --sb: var(--band-2); }
+.shortcut-btn:nth-child(7n+5) { --sb: var(--band-4); }
+.shortcut-btn:nth-child(7n+6) { --sb: var(--band-3); }
+.shortcut-btn:nth-child(7n+7) { --sb: var(--band-7); }
+body.crema-display .shortcut-btn {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: var(--sb, var(--crema-accent));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--sb, var(--crema-accent)) 25%, transparent);
+}
+body.crema-display .shortcut-btn:active {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* ===== History rainbow dots — une bande différente par message =====
+ * (s'applique automatiquement à toute liste de .msg-card) */
+.msg-card {
+  position: relative;
+  padding-left: 26px;
+}
+.msg-card::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 18px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--crema-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--crema-accent) 22%, transparent);
+}
+.msg-card:nth-child(7n+1)::before { background: var(--band-1); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-1) 22%, transparent); }
+.msg-card:nth-child(7n+2)::before { background: var(--band-4); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-4) 22%, transparent); }
+.msg-card:nth-child(7n+3)::before { background: var(--band-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-2) 22%, transparent); }
+.msg-card:nth-child(7n+4)::before { background: var(--band-6); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-6) 22%, transparent); }
+.msg-card:nth-child(7n+5)::before { background: var(--band-5); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-5) 22%, transparent); }
+.msg-card:nth-child(7n+6)::before { background: var(--band-3); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-3) 22%, transparent); }
+.msg-card:nth-child(7n+7)::before { background: var(--band-7); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-7) 22%, transparent); }
+
+/* History entry body texte en serif italique (matche le mock "le fil") */
+.msg-card .msg-text {
+  font-family: var(--crema-font-serif);
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  color: var(--crema-text);
+}
+.msg-card .reply-context {
+  font-family: var(--crema-font-serif);
+  font-style: italic;
+  font-size: 13px;
+}
+.msg-card .msg-meta .direction .arrow {
+  color: var(--crema-accent);
 }
