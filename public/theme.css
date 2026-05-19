@@ -1,55 +1,90 @@
-/* Crema — Direction Sauge
- * Single source of truth for palette + signature label utility.
- * PWA pages get the light defaults via :root.
- * Display page overrides via .crema-display (with .day variant).
+/* Crema — Direction Mirage (inspirée Tame Impala / Currents)
+ * Coucher de soleil pêche → blush → lavande, accent corail, bande
+ * rainbow en signature. Source unique pour la palette + utilitaires.
+ * PWA = fond clair par défaut, Display = sunset gradient.
  */
 
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 :root {
-  /* PWA (light) — defaults */
-  --crema-bg:               #F6F8F4;
+  /* PWA (clair chaud) — defaults */
+  --crema-bg:               #FBF1E2;
+  --crema-bg-gradient:      linear-gradient(180deg, #FBF1E2 0%, #FBF1E2 60%, #EFC5BE55 100%);
   --crema-surface:          #FFFFFF;
-  --crema-text:             #121711;
-  --crema-muted:            #6E776A;
-  --crema-stroke:           #DCE2D7;
-  --crema-stroke-faint:     #E8EEE3;
+  --crema-text:             #2A1A44;
+  --crema-muted:            #8E7A8A;
+  --crema-stroke:           #EADFCA;
+  --crema-stroke-faint:     #F2E8D4;
 
-  /* Shared across both palettes */
-  --crema-accent:           #A8C49C;  /* sage — the living color */
-  --crema-accent-ink:       #0C100C;  /* readable on accent backgrounds */
-  --crema-attention:        #C9A86A;  /* warm gold — reserved for "pending" */
-  --crema-presence:         #A8C49C;  /* same as accent on purpose */
+  /* Living color = corail (remplace la sauge) */
+  --crema-accent:           #E8896E;
+  --crema-accent-deep:      #C4659C;
+  --crema-accent-ink:       #FFFFFF;
+  --crema-attention:        #E8B25E;
+  --crema-presence:         #7DC0B0;
 
-  /* Semantic — only for destructive feedback / errors. Use sparingly. */
-  --crema-danger:           #B3261E;
-  --crema-danger-bg:        #F7E6E1;
+  --crema-danger:           #C75A4F;
+  --crema-danger-bg:        #F7E0DC;
 
-  /* Type stacks */
-  --crema-font-sans:        -apple-system, BlinkMacSystemFont, "Inter",
-                            "Segoe UI", Roboto, system-ui, sans-serif;
-  --crema-font-mono:        ui-monospace, SFMono-Regular, Menlo,
-                            Consolas, monospace;
+  /* Currents — 7 bandes rainbow exposées comme tokens
+   * (utile pour highlights de status, dots, gradients ponctuels) */
+  --band-1: #E8896E;  /* corail */
+  --band-2: #E8B25E;  /* ambre */
+  --band-3: #D9D277;  /* lime sun-faded */
+  --band-4: #7DC0B0;  /* ocean menthe */
+  --band-5: #6F9BD1;  /* bleu rêve */
+  --band-6: #A685C9;  /* lavande */
+  --band-7: #C46FA1;  /* magenta rose */
+  --crema-rainbow:    linear-gradient(90deg,
+                        var(--band-1), var(--band-2), var(--band-3),
+                        var(--band-4), var(--band-5), var(--band-6),
+                        var(--band-7));
+
+  /* Type stacks — DM Sans (UI), Instrument Serif italique (hero), JBM (technique) */
+  --crema-font-sans:        "DM Sans", -apple-system, BlinkMacSystemFont,
+                            "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+  --crema-font-serif:       "Instrument Serif", "Cormorant Garamond",
+                            Georgia, "Times New Roman", serif;
+  --crema-font-mono:        "JetBrains Mono", ui-monospace, SFMono-Regular,
+                            Menlo, Consolas, monospace;
 }
 
-/* Display (dark warm-green) — applied to body.crema-display on display.html */
+/* ===== Display — coucher de soleil ===== */
+/* Le background combine 2 radiaux (soleil haut-gauche + halo corail bas-droite)
+ * sur un linéaire pêche → blush → lavande. Effet "Currents" sans SVG. */
 .crema-display,
 .crema-display.night {
-  --crema-bg:               #121711;
-  --crema-plinth:           #0C100C;  /* action zone band */
-  --crema-text:             #E6E4D8;  /* parchment */
-  --crema-muted:            #7A8A6E;
-  --crema-stroke:           #2A332A;
+  --crema-bg:               #EFC5BE;
+  --crema-bg-gradient:
+    radial-gradient(ellipse at 80% 110%, rgba(196, 111, 161, 0.38) 0%, transparent 55%),
+    radial-gradient(ellipse at 20% -10%, rgba(232, 178, 94, 0.40) 0%, transparent 50%),
+    linear-gradient(170deg, #F7E0C2 0%, #EFC5BE 45%, #C7B2DA 100%);
+  --crema-plinth:           #2A1F44;
+  --crema-text:             #2A1A44;
+  --crema-muted:            #5C4A6E;
+  --crema-stroke:           rgba(42, 26, 68, 0.14);
 }
 
-/* Display day variant — slightly brighter, less moody */
+/* Day = soleil au zénith — plus jaune, moins lavande */
 .crema-display.day {
-  --crema-bg:               #1F2A1D;
-  --crema-text:             #F0EDDF;
-  --crema-muted:            #8A9A7E;
+  --crema-bg:               #F7E0C2;
+  --crema-bg-gradient:
+    radial-gradient(ellipse at 50% -10%, rgba(232, 178, 94, 0.55) 0%, transparent 55%),
+    radial-gradient(ellipse at 90% 100%, rgba(232, 137, 110, 0.32) 0%, transparent 50%),
+    linear-gradient(180deg, #FBF1E2 0%, #F7E0C2 60%, #EFC5BE 100%);
+  --crema-text:             #2A1A44;
+  --crema-muted:            #8A7A8E;
 }
 
-/* ===== Signature A — uppercase kerned label ===== */
-/* Apply anywhere a "label" feels right: sender names, day headers,
- * section titles. Size is set by the host context. */
+/* Apply the gradient to the body of any page that opts in via this class */
+body.crema-display {
+  background: var(--crema-bg-gradient);
+  background-attachment: fixed;
+}
+
+/* ===== Signatures typographiques ===== */
+/* .crema-label = uppercase kerné (DM Sans 700). Identité partagée entre
+ * sender names, day headers, section titles. Taille fixée par le contexte. */
 .crema-label {
   font-family: var(--crema-font-sans);
   font-weight: 700;
@@ -58,5 +93,35 @@
   line-height: 1;
 }
 
-/* ===== Type utilities ===== */
-.crema-mono { font-family: var(--crema-font-mono); }
+/* .crema-serif = Instrument Serif italique pour les heroes — la touche
+ * "rêveuse / 70s" de la direction Mirage. À appliquer sur l'horloge,
+ * le texte des messages, les titres de marque. */
+.crema-serif {
+  font-family: var(--crema-font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+/* .crema-mono = JetBrains Mono kerné — réservé aux infos techniques
+ * (timestamps, IDs, pourcentages, status). */
+.crema-mono {
+  font-family: var(--crema-font-mono);
+  letter-spacing: 0.05em;
+}
+
+/* ===== Signature visuelle — onde rainbow ===== */
+/* Bande rainbow fine en bas de chaque écran Display. Subtile mais
+ * reconnaissable, c'est le "crema" qui devient onde. */
+body.crema-display::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--crema-rainbow);
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.85;
+}

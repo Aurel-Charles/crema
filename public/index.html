@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#F6F8F4" />
+  <meta name="theme-color" content="#FBF1E2" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Crema" />
@@ -16,8 +16,9 @@
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; height: 100%; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--crema-bg);
+      font-family: var(--crema-font-sans);
+      background: var(--crema-bg-gradient);
+      background-attachment: fixed;
       color: var(--crema-text);
       display: flex;
       flex-direction: column;
@@ -38,9 +39,12 @@
     }
     h1 {
       margin: 0;
-      font-size: 28px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
+      font-family: var(--crema-font-serif);
+      font-style: italic;
+      font-size: 32px;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      color: var(--crema-text);
     }
     .me {
       font-size: 11px;
@@ -123,7 +127,7 @@
     }
     select:focus, textarea:focus {
       border-color: var(--crema-accent);
-      box-shadow: 0 0 0 3px rgba(168, 196, 156, 0.2);
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.2);
     }
     select:disabled, textarea:disabled { opacity: 0.5; }
     select[hidden] { display: none; }
@@ -218,7 +222,7 @@
     }
     .chip-add input:focus {
       border-color: var(--crema-accent);
-      box-shadow: 0 0 0 3px rgba(168, 196, 156, 0.2);
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.2);
     }
     .chip-add button {
       width: 44px;
@@ -278,7 +282,7 @@
     }
     .custom-row input:focus {
       border-color: var(--crema-accent);
-      box-shadow: 0 0 0 3px rgba(168, 196, 156, 0.2);
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.2);
     }
 
     /* Send is THE primary action → wears the living sage. */
