@@ -6,8 +6,15 @@ import {
 import { peerLog, errLog } from './logger.js';
 
 const HEALTH_CHECK_INTERVAL_MS = 10_000;
-const HEALTH_CHECK_TIMEOUT_MS = 3_000;
+const HEALTH_CHECK_TIMEOUT_MS = 5_000;
 const HEALTH_MAX_FAILURES = 3;
+
+// Long-running mDNS pipelines rust after a few hours on Pi (observed: full
+// peer loss at ~4h on both sides during a 5h stability run, despite Node and
+// avahi-daemon staying healthy). Recreating advertisement + browser every 2h
+// keeps discovery fresh without disrupting traffic — peers see a brief
+// dedup but the address book stays current.
+const MDNS_REBIRTH_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
 const peerMap = new Map();      // service.name -> peer
 const peerFailures = new Map(); // service.name -> consecutive failure count
@@ -55,25 +62,10 @@ async function pingPeer(peer) {
 }
 
 export function init({ io }) {
-  const advertisement = mdns.createAdvertisement(
-    mdns.tcp(SERVICE_TYPE),
-    PORT,
-    {
-      name: SERVICE_NAME,
-      txtRecord: { owner: OWNER, instanceId: INSTANCE_ID },
-    },
-  );
-  advertisement.on('error', (err) => errLog('mdns:advertise-error', err.message));
-  advertisement.start();
+  let advertisement = null;
+  let browser = null;
 
-  // mdns 2.7.2's getaddrinfo step crashes on Node 18+ (deprecated internal API).
-  // Stop the resolver after DNSServiceResolve — we use the .local hostname directly,
-  // letting the OS resolver (avahi via NSS) handle name-to-IP at fetch time.
-  const browser = mdns.createBrowser(mdns.tcp(SERVICE_TYPE), {
-    resolverSequence: [mdns.rst.DNSServiceResolve()],
-  });
-
-  browser.on('serviceUp', async (service) => {
+  const onServiceUp = async (service) => {
     const txt = service.txtRecord ?? {};
     if (!txt.instanceId) return;
     if (txt.instanceId === INSTANCE_ID) return;
@@ -115,9 +107,9 @@ export function init({ io }) {
         owner: peer.owner, oldAddress: existing.address, address,
       });
     }
-  });
+  };
 
-  browser.on('serviceDown', (service) => {
+  const onServiceDown = (service) => {
     const peer = peerMap.get(service.name);
     if (peer) {
       peerMap.delete(service.name);
@@ -125,10 +117,48 @@ export function init({ io }) {
       peerLog('peer:down-mdns', `${peer.owner} a annoncé son départ`, { owner: peer.owner });
       io.emit('peer:down', { instanceId: peer.instanceId });
     }
-  });
+  };
 
-  browser.on('error', (err) => errLog('mdns:browse-error', err.message));
-  browser.start();
+  function startMdns() {
+    advertisement = mdns.createAdvertisement(
+      mdns.tcp(SERVICE_TYPE),
+      PORT,
+      {
+        name: SERVICE_NAME,
+        txtRecord: { owner: OWNER, instanceId: INSTANCE_ID },
+      },
+    );
+    advertisement.on('error', (err) => errLog('mdns:advertise-error', err.message));
+    advertisement.start();
+
+    // mdns 2.7.2's getaddrinfo step crashes on Node 18+ (deprecated internal API).
+    // Stop the resolver after DNSServiceResolve — we use the .local hostname directly,
+    // letting the OS resolver (avahi via NSS) handle name-to-IP at fetch time.
+    browser = mdns.createBrowser(mdns.tcp(SERVICE_TYPE), {
+      resolverSequence: [mdns.rst.DNSServiceResolve()],
+    });
+    browser.on('serviceUp', onServiceUp);
+    browser.on('serviceDown', onServiceDown);
+    browser.on('error', (err) => errLog('mdns:browse-error', err.message));
+    browser.start();
+  }
+
+  function stopMdns() {
+    try { browser?.stop(); } catch {}
+    try { advertisement?.stop(); } catch {}
+    browser = null;
+    advertisement = null;
+  }
+
+  startMdns();
+
+  const rebirthInterval = setInterval(() => {
+    peerLog('mdns:rebirth', 'Recréation advertisement + browser (anti-rust)', {
+      everyMs: MDNS_REBIRTH_INTERVAL_MS,
+    });
+    stopMdns();
+    setTimeout(startMdns, 500);
+  }, MDNS_REBIRTH_INTERVAL_MS);
 
   // Active health check — mDNS "bye" packets are unreliable (lost when a peer
   // reboots or loses power), so we ping each peer's /me every 10 s and drop
@@ -158,9 +188,9 @@ export function init({ io }) {
   }, HEALTH_CHECK_INTERVAL_MS);
 
   function stop() {
+    clearInterval(rebirthInterval);
     clearInterval(healthInterval);
-    try { browser.stop(); } catch {}
-    try { advertisement.stop(); } catch {}
+    stopMdns();
   }
 
   return { stop };
