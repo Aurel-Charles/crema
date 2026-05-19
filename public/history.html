@@ -45,10 +45,16 @@
     h1 {
       margin: 0;
       font-family: var(--crema-font-serif);
-      font-style: italic;
-      font-size: 28px;
+      font-style: normal;
+      font-size: 36px;
       font-weight: 400;
+      line-height: 1;
       letter-spacing: -0.01em;
+      color: var(--crema-text);
+    }
+    h1 .accent {
+      font-style: italic;
+      color: var(--crema-accent-deep);
     }
 
     main {
@@ -188,7 +194,7 @@
 <body>
   <header>
     <a href="/" class="back" aria-label="Retour">←</a>
-    <h1>Historique</h1>
+    <h1><span class="accent">le</span> fil</h1>
   </header>
 
   <main id="main">

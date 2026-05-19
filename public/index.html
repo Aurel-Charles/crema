@@ -247,29 +247,102 @@
     .chip-add button:active { background: var(--crema-stroke-faint); }
     .chip-add button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* TTL presets */
+    /* TTL presets — full-width rows, band-colored dot, label, TTL value */
     .presets {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
       gap: 6px;
     }
     .preset {
-      padding: 10px 14px;
-      font-size: 14px;
-      font-weight: 500;
+      display: flex;
+      align-items: center;
+      padding: 12px 14px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 400;
       color: var(--crema-text);
       background: var(--crema-surface);
-      border: 1px solid var(--crema-stroke);
+      border: 1px solid var(--crema-stroke-faint);
       border-radius: 12px;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      text-align: left;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+    .preset .preset-dot {
+      width: 8px;
+      height: 8px;
+      margin-right: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--band-1);
+    }
+    .preset:nth-child(2) .preset-dot { background: var(--band-2); }
+    .preset:nth-child(3) .preset-dot { background: var(--band-4); }
+    .preset:nth-child(4) .preset-dot { background: var(--band-6); }
+    .preset:nth-child(5) .preset-dot { background: var(--band-3); }
+    .preset .preset-lbl { flex: 1; }
+    .preset .preset-val {
+      font-family: var(--crema-font-mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--crema-muted);
     }
     .preset.active {
-      background: var(--crema-accent);
+      background: linear-gradient(90deg,
+        color-mix(in srgb, var(--crema-accent) 12%, var(--crema-surface)),
+        color-mix(in srgb, var(--crema-accent-deep) 7%, var(--crema-surface)));
       border-color: var(--crema-accent);
-      color: var(--crema-accent-ink);
+      font-weight: 600;
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.10);
     }
-    .preset:active { transform: scale(0.97); }
+    .preset.active .preset-val {
+      color: var(--crema-accent-deep);
+      font-weight: 500;
+    }
+    .preset:active { transform: scale(0.99); }
+
+    /* ===== Envoi hero — "tu envoies à flo" en italic serif magenta ===== */
+    .envoi-hero {
+      padding: 16px 6px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .envoi-label {
+      font-family: var(--crema-font-sans);
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      color: var(--crema-muted);
+      text-transform: uppercase;
+    }
+    .envoi-target {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .envoi-name {
+      font-family: var(--crema-font-serif);
+      font-style: italic;
+      font-size: 44px;
+      line-height: 1;
+      color: var(--crema-accent-deep);
+      text-transform: lowercase;
+    }
+    .envoi-wave {
+      display: inline-block;
+      width: 70px;
+      height: 12px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 70 12' fill='none' stroke='%23E8896E' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M 0 6 Q 4.5 0 9 6 T 18 6 T 27 6 T 36 6 T 45 6 T 54 6 T 63 6 T 70 6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+    .envoi-meta {
+      font-family: var(--crema-font-mono);
+      font-size: 10.5px;
+      color: var(--crema-muted);
+      letter-spacing: 0.04em;
+    }
 
     .custom-row {
       display: flex;
@@ -373,10 +446,17 @@
   </header>
 
   <form id="form">
-    <div class="field">
-      <label for="target" class="crema-label">Destinataire</label>
+    <div class="field envoi-field">
+      <div class="envoi-hero">
+        <div class="envoi-label">tu envoies à</div>
+        <div class="envoi-target">
+          <span class="envoi-name" id="envoi-name">…</span>
+          <span class="envoi-wave" aria-hidden="true"></span>
+        </div>
+        <div class="envoi-meta" id="envoi-meta"></div>
+      </div>
       <div class="peer-picker" id="peer-picker" hidden></div>
-      <select id="target" required>
+      <select id="target" required aria-label="Destinataire">
         <option value="">Recherche…</option>
       </select>
     </div>
@@ -398,11 +478,31 @@
     <div class="field">
       <label class="crema-label">Disponible</label>
       <div class="presets" id="presets">
-        <button type="button" class="preset" data-preset="30s">30 s</button>
-        <button type="button" class="preset" data-preset="5min">5 min</button>
-        <button type="button" class="preset" data-preset="1h">1 h</button>
-        <button type="button" class="preset" data-preset="evening">Ce soir</button>
-        <button type="button" class="preset" data-preset="custom">Perso…</button>
+        <button type="button" class="preset" data-preset="30s">
+          <span class="preset-dot"></span>
+          <span class="preset-lbl">Maintenant</span>
+          <span class="preset-val">30 s</span>
+        </button>
+        <button type="button" class="preset" data-preset="5min">
+          <span class="preset-dot"></span>
+          <span class="preset-lbl">Un café</span>
+          <span class="preset-val">5 min</span>
+        </button>
+        <button type="button" class="preset" data-preset="1h">
+          <span class="preset-dot"></span>
+          <span class="preset-lbl">Une pause</span>
+          <span class="preset-val">1 h</span>
+        </button>
+        <button type="button" class="preset" data-preset="evening">
+          <span class="preset-dot"></span>
+          <span class="preset-lbl">Ce soir</span>
+          <span class="preset-val">22:00</span>
+        </button>
+        <button type="button" class="preset" data-preset="custom">
+          <span class="preset-dot"></span>
+          <span class="preset-lbl">Personnalisé</span>
+          <span class="preset-val">…</span>
+        </button>
       </div>
       <div class="custom-row" id="custom-row" hidden>
         <input id="custom-mins" type="number" min="1" max="1440" value="10" />
@@ -438,12 +538,15 @@
     const presetsEl = document.getElementById('presets');
     const customRow = document.getElementById('custom-row');
     const customMins = document.getElementById('custom-mins');
+    const envoiName = document.getElementById('envoi-name');
+    const envoiMeta = document.getElementById('envoi-meta');
 
     // ===== State =====
     let options = [];                 // string[]
     let selectedPreset = '5min';      // default for plain messages
     let ttlManuallySet = false;       // true once user clicks a preset
     let peers = [];
+    let myOwner = '';                 // populated by loadMe(), used by the envoi hero
 
     // ===== Textarea auto-resize =====
     function autosizeTextarea() {
@@ -586,7 +689,9 @@
       try {
         const r = await fetch('/me');
         const { owner } = await r.json();
+        myOwner = owner ?? '';
         meLabel.innerHTML = `depuis <strong>${owner}</strong>`;
+        renderHero();
       } catch {
         meLabel.textContent = '';
       }
@@ -604,6 +709,20 @@
       `).join('');
     }
 
+    // "tu envoies à {peer}" hero — mirror of the picker's selection
+    function renderHero() {
+      if (peers.length === 0) {
+        envoiName.textContent = '…';
+        envoiMeta.textContent = myOwner ? `depuis ${myOwner.toLowerCase()}` : '';
+        return;
+      }
+      const current = peers.find((p) => p.instanceId === targetSel.value) || peers[0];
+      envoiName.textContent = current.owner.toLowerCase();
+      envoiMeta.textContent = myOwner
+        ? `depuis ${myOwner.toLowerCase()} · maintenant`
+        : 'maintenant';
+    }
+
     peerPicker.addEventListener('click', (e) => {
       const btn = e.target.closest('.peer-btn');
       if (!btn) return;
@@ -611,9 +730,12 @@
       if (!id || id === targetSel.value) return;
       targetSel.value = id;
       renderPeerPicker();
+      renderHero();
       // The submit + typing paths already read targetSel.value, so keeping
       // the <select> as source of truth means we don't need to retrofit them.
     });
+    // Select fallback (5+ peers) — keep the hero in sync when changed
+    targetSel.addEventListener('change', renderHero);
 
     async function loadPeers() {
       try {
@@ -650,11 +772,14 @@
         }
         sendBtn.disabled = false;
       } catch {
+        peers = [];
         targetSel.innerHTML = '<option value="">Erreur réseau</option>';
         targetSel.hidden = false;
         peerPicker.hidden = true;
         peerPicker.innerHTML = '';
         sendBtn.disabled = true;
+      } finally {
+        renderHero();
       }
     }
 

@@ -343,6 +343,68 @@
       background: rgba(179, 38, 30, 0.18);
       border-color: var(--crema-danger);
     }
+
+    /* ===== Mirage phase 3 — msg header signature ===== */
+    /* Header row with avatar + sender block + EN RÉPONSE pill.
+     * Left-aligned inside the centered .msg canvas. */
+    .msg .msg-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 26px;
+      text-align: left;
+    }
+    .msg .avatar {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--band-1), var(--band-7));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--crema-font-serif);
+      font-style: italic;
+      font-weight: 400;
+      font-size: 22px;
+      color: #FFFFFF;
+      box-shadow: 0 6px 16px -8px rgba(232, 137, 110, 0.55);
+    }
+    .msg .msg-header-text {
+      flex: 1;
+      min-width: 0;
+    }
+    /* From/subtitle sit in the header now; reset the legacy margins. */
+    .msg .msg-header .from {
+      margin-bottom: 2px;
+      opacity: 1;
+    }
+    .msg .msg-header .subtitle {
+      margin: 0;
+      opacity: 0.78;
+    }
+    .msg .en-reponse-pill {
+      flex-shrink: 0;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid var(--crema-stroke);
+      border-radius: 14px;
+      font-family: var(--crema-font-mono);
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      color: var(--crema-muted);
+      line-height: 1;
+    }
+    /* Reply quote left-aligned with corail leading bar (matches mock) */
+    .msg .reply-context {
+      max-width: 70vw;
+      margin: 0 auto 22px;
+      padding-left: 14px;
+      border-left: 2px solid var(--crema-accent);
+      text-align: left;
+    }
   </style>
 </head>
 <body class="crema-display night">
@@ -479,17 +541,20 @@
     function renderMessage() {
       if (!currentMsg) return;
       const { text, from, isReply, replyToText } = currentMsg;
+      const initial = from ? escapeHtml(from.charAt(0).toUpperCase()) : '';
+      const avatar = initial ? `<div class="avatar">${initial}</div>` : '';
       const fromLabel = from ? `<div class="from crema-label">${escapeHtml(from)}</div>` : '';
-      const subtitle = `<div class="subtitle">${buildSubtitle()}</div>`;
+      const subtitleHtml = `<div class="subtitle">${buildSubtitle()}</div>`;
+      const pill = isReply ? '<div class="en-reponse-pill">EN RÉPONSE</div>' : '';
+      const header = `<div class="msg-header">${avatar}<div class="msg-header-text">${fromLabel}${subtitleHtml}</div>${pill}</div>`;
       const context = (isReply && replyToText)
-        ? `<div class="reply-context">en réponse à «&nbsp;${escapeHtml(truncate(replyToText, REPLY_CONTEXT_MAX_CHARS))}&nbsp;»</div>`
+        ? `<div class="reply-context">«&nbsp;${escapeHtml(truncate(replyToText, REPLY_CONTEXT_MAX_CHARS))}&nbsp;»</div>`
         : '';
-      const prefix = isReply ? '<span class="reply-prefix">↩</span>' : '';
       const progress = currentMsg.expiresAtMs
         ? '<div class="progress"><div class="progress-fill"></div></div>'
         : '';
       screen.className = 'msg';
-      screen.innerHTML = `${fromLabel}${subtitle}${context}<div class="text">${prefix}${escapeHtml(text)}</div>${replyBarHtml()}${progress}`;
+      screen.innerHTML = `${header}${context}<div class="text">${escapeHtml(text)}</div>${replyBarHtml()}${progress}`;
     }
 
     function buildSubtitle() {
