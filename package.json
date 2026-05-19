@@ -5,7 +5,8 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "stability-test": "node stability-test.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",
