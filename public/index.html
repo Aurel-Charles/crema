@@ -480,23 +480,23 @@
       <div class="presets" id="presets">
         <button type="button" class="preset" data-preset="30s">
           <span class="preset-dot"></span>
-          <span class="preset-lbl">Maintenant</span>
-          <span class="preset-val">30 s</span>
+          <span class="preset-lbl">30 s</span>
+          <span class="preset-val">→ —</span>
         </button>
         <button type="button" class="preset" data-preset="5min">
           <span class="preset-dot"></span>
-          <span class="preset-lbl">Un café</span>
-          <span class="preset-val">5 min</span>
+          <span class="preset-lbl">5 min</span>
+          <span class="preset-val">→ —</span>
         </button>
         <button type="button" class="preset" data-preset="1h">
           <span class="preset-dot"></span>
-          <span class="preset-lbl">Une pause</span>
-          <span class="preset-val">1 h</span>
+          <span class="preset-lbl">1 h</span>
+          <span class="preset-val">→ —</span>
         </button>
         <button type="button" class="preset" data-preset="evening">
           <span class="preset-dot"></span>
-          <span class="preset-lbl">Ce soir</span>
-          <span class="preset-val">22:00</span>
+          <span class="preset-lbl">Jusque ce soir</span>
+          <span class="preset-val">→ —</span>
         </button>
         <button type="button" class="preset" data-preset="custom">
           <span class="preset-dot"></span>
@@ -618,6 +618,29 @@
         return (Number.isFinite(m) && m > 0 ? m : 10) * 60_000;
       }
       return 5 * 60_000;
+    }
+
+    // For each preset row, populate the right-side hint with the absolute
+    // time the message would expire at (e.g. "→ 14:37"). Keeps the label
+    // column free for the duration name; the hint makes the otherwise-
+    // abstract durations concrete (and "Jusque ce soir" reveals 22:00).
+    const hourMinFmt = new Intl.DateTimeFormat('fr-FR', {
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    function updatePresetExpiryHints() {
+      const now = Date.now();
+      for (const btn of presetsEl.children) {
+        const key = btn.dataset.preset;
+        const valEl = btn.querySelector('.preset-val');
+        if (!valEl) continue;
+        if (key === 'custom') { valEl.textContent = '…'; continue; }
+        const ttl = computeTtlMs(key);
+        // Sub-minute TTL: HH:MM would round to the current minute, so the
+        // hint is useless. The label ("30 s") already says everything.
+        if (ttl < 60_000) { valEl.textContent = ''; continue; }
+        const target = new Date(now + ttl);
+        valEl.textContent = `→ ${hourMinFmt.format(target)}`;
+      }
     }
 
     // ===== Rendering =====
@@ -831,9 +854,13 @@
     // ===== Init =====
     renderChips();
     renderPresets();
+    updatePresetExpiryHints();
     loadMe();
     loadPeers();
     setInterval(loadPeers, 5000);
+    // Keep the "→ HH:MM" hints honest as time passes (mainly affects
+    // "Jusque ce soir" which counts down toward 22:00).
+    setInterval(updatePresetExpiryHints, 30_000);
   </script>
 </body>
 </html>
