@@ -25,50 +25,95 @@
       min-height: 100vh;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
+
+    /* ===== App shell — mobile : pleine page ; tablette/desktop : panneau centré =====
+     * Mobile-first. Sur ≥600px le PWA cesse de s'étirer et devient une "carte"
+     * crème posée sur le gradient chaud — lisible jusqu'au desktop. */
+    .app {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+    @media (min-width: 600px) {
+      body {
+        align-items: center;
+        justify-content: center;
+        padding: max(env(safe-area-inset-top), 32px) 24px 32px;
+      }
+      .app {
+        flex: 0 1 auto;
+        max-width: 600px;
+        margin: auto;
+        background: var(--crema-bg);
+        border: 1px solid var(--crema-stroke);
+        border-radius: 28px;
+        box-shadow: 0 30px 90px -45px rgba(196, 101, 156, 0.5),
+                    0 2px 8px -4px rgba(42, 26, 68, 0.12);
+        overflow: hidden;
+      }
+      header { padding-top: 28px; }
+      form { padding: 24px 28px 28px; }
+    }
+    @media (min-width: 1024px) {
+      .app { max-width: 640px; }
+      header { padding-left: 28px; padding-right: 28px; }
+    }
+
     header {
-      padding: 24px 20px 0;
+      padding: 22px 20px 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
     }
-    .brand {
+    /* Wordmark mono kerné — "crema · send · aurel" (signature Mega Type) */
+    .wordmark {
       display: flex;
       align-items: baseline;
-      gap: 8px;
-    }
-    h1 {
-      margin: 0;
-      font-family: var(--crema-font-serif);
-      font-style: italic;
-      font-size: 32px;
-      font-weight: 400;
-      letter-spacing: -0.01em;
-      color: var(--crema-text);
-    }
-    .me {
+      gap: 7px;
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
       font-size: 11px;
-      color: var(--crema-muted);
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--crema-text);
+      min-width: 0;
     }
-    .me strong { color: var(--crema-text); }
+    .wordmark .wm-sep {
+      color: var(--crema-muted);
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .wordmark .wm-mode { color: var(--crema-accent-deep); }
+    .wordmark .wm-me {
+      color: var(--crema-muted);
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 2px;
+      flex-shrink: 0;
     }
     .icon-link {
-      width: 40px;
-      height: 40px;
+      width: 34px;
+      height: 34px;
       display: flex;
       align-items: center;
       justify-content: center;
       color: var(--crema-muted);
+      opacity: 0.7;
       text-decoration: none;
-      border-radius: 12px;
-      transition: background 0.15s, color 0.15s;
+      border-radius: 10px;
+      transition: background 0.15s, color 0.15s, opacity 0.15s;
     }
-    .icon-link:active { background: var(--crema-stroke-faint); color: var(--crema-text); }
-    .icon-link svg { width: 22px; height: 22px; }
+    .icon-link:active { background: var(--crema-stroke-faint); color: var(--crema-text); opacity: 1; }
+    .icon-link svg { width: 18px; height: 18px; }
 
     form {
       flex: 1;
@@ -99,6 +144,30 @@
       gap: 6px;
     }
 
+    /* Label mono kerné + compteur — ligne "message ··· 20/120" du mockup */
+    .msg-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .mono-label {
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--crema-muted);
+    }
+    .char-count {
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--crema-muted);
+      transition: color 0.15s;
+    }
+    .char-count.near { color: var(--crema-accent); }
+
     select, textarea {
       font-size: 17px;
       font-family: inherit;
@@ -118,15 +187,15 @@
       padding-right: 40px;
     }
     textarea {
-      min-height: 110px;
+      min-height: 120px;
       max-height: 320px;
       resize: none;
       padding: 16px;
       font-family: var(--crema-font-serif);
-      font-size: 19px;
+      font-size: 26px;
       font-weight: 400;
-      line-height: 1.35;
-      letter-spacing: -0.005em;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
       overflow-y: auto;
       box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.13),
                   0 8px 24px -10px rgba(196, 101, 156, 0.18);
@@ -301,47 +370,42 @@
     }
     .preset:active { transform: scale(0.99); }
 
-    /* ===== Envoi hero — "tu envoies à flo" en italic serif magenta ===== */
+    /* ===== Envoi hero — Mega Type : "flo." en 110px serif italic magenta ===== */
     .envoi-hero {
-      padding: 16px 6px 6px;
+      padding: 8px 4px 2px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 4px;
     }
     .envoi-label {
-      font-family: var(--crema-font-sans);
+      font-family: var(--crema-font-mono);
       font-weight: 700;
       font-size: 10px;
-      letter-spacing: 0.25em;
+      letter-spacing: 0.28em;
       color: var(--crema-muted);
       text-transform: uppercase;
     }
     .envoi-target {
       display: flex;
-      align-items: center;
-      gap: 14px;
+      align-items: flex-end;
     }
     .envoi-name {
       font-family: var(--crema-font-serif);
       font-style: italic;
-      font-size: 44px;
-      line-height: 1;
+      font-size: clamp(64px, 22vw, 110px);
+      line-height: 0.9;
+      letter-spacing: -0.04em;
       color: var(--crema-accent-deep);
       text-transform: lowercase;
-    }
-    .envoi-wave {
-      display: inline-block;
-      width: 70px;
-      height: 12px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 70 12' fill='none' stroke='%23E8896E' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M 0 6 Q 4.5 0 9 6 T 18 6 T 27 6 T 36 6 T 45 6 T 54 6 T 63 6 T 70 6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: center;
+      margin: 2px 0 0;
     }
     .envoi-meta {
       font-family: var(--crema-font-mono);
-      font-size: 10.5px;
+      font-weight: 600;
+      font-size: 10px;
       color: var(--crema-muted);
-      letter-spacing: 0.04em;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
     }
 
     .custom-row {
@@ -376,7 +440,7 @@
       padding: 18px;
       font-family: var(--crema-font-serif);
       font-style: italic;
-      font-size: 20px;
+      font-size: 24px;
       font-weight: 400;
       letter-spacing: 0.01em;
       text-transform: lowercase;
@@ -391,12 +455,14 @@
       margin-top: auto;
     }
     .send-btn::after {
-      content: " →";
-      font-family: var(--crema-font-sans);
+      content: "→";
+      font-family: var(--crema-font-mono);
       font-style: normal;
-      font-weight: 300;
-      font-size: 22px;
-      margin-left: 8px;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: 0.1em;
+      margin-left: 10px;
+      vertical-align: 2px;
     }
     .send-btn:active {
       transform: scale(0.98);
@@ -419,10 +485,13 @@
   </style>
 </head>
 <body>
+  <div class="app">
   <header>
-    <div class="brand">
-      <h1>Crema</h1>
-      <span class="me" id="me-label"></span>
+    <div class="wordmark">
+      <span class="wm-crema">crema</span>
+      <span class="wm-sep">·</span>
+      <span class="wm-mode">send</span>
+      <span class="wm-me" id="me-label"></span>
     </div>
     <div class="header-actions">
       <a href="/history" class="icon-link" aria-label="Historique">
@@ -448,10 +517,9 @@
   <form id="form">
     <div class="field envoi-field">
       <div class="envoi-hero">
-        <div class="envoi-label">tu envoies à</div>
+        <div class="envoi-label">↓ tu envoies à</div>
         <div class="envoi-target">
           <span class="envoi-name" id="envoi-name">…</span>
-          <span class="envoi-wave" aria-hidden="true"></span>
         </div>
         <div class="envoi-meta" id="envoi-meta"></div>
       </div>
@@ -462,12 +530,15 @@
     </div>
 
     <div class="field">
-      <label for="text" class="crema-label">Message</label>
-      <textarea id="text" placeholder="Ton message…" autocomplete="off" required></textarea>
+      <div class="msg-head">
+        <label for="text" class="mono-label">message</label>
+        <span class="char-count" id="char-count" aria-hidden="true">0/120</span>
+      </div>
+      <textarea id="text" placeholder="ton message…" autocomplete="off" maxlength="120" required></textarea>
     </div>
 
     <div class="field">
-      <label class="crema-label">Options de réponse <span class="optional">(facultatif)</span></label>
+      <label class="mono-label">Options de réponse <span class="optional">(facultatif)</span></label>
       <div class="chips" id="chips"></div>
       <div class="chip-add">
         <input id="chip-input" type="text" placeholder="Ex: Oui" maxlength="30" />
@@ -476,7 +547,7 @@
     </div>
 
     <div class="field">
-      <label class="crema-label">Disponible</label>
+      <label class="mono-label">Disponible</label>
       <div class="presets" id="presets">
         <button type="button" class="preset" data-preset="30s">
           <span class="preset-dot"></span>
@@ -513,6 +584,7 @@
     <div class="status" id="status"></div>
     <button type="submit" class="send-btn" id="send" disabled>Envoyer</button>
   </form>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
@@ -530,6 +602,7 @@
     const targetSel = document.getElementById('target');
     const peerPicker = document.getElementById('peer-picker');
     const textEl = document.getElementById('text');
+    const charCount = document.getElementById('char-count');
     const sendBtn = document.getElementById('send');
     const status = document.getElementById('status');
     const chipsEl = document.getElementById('chips');
@@ -548,10 +621,19 @@
     let peers = [];
     let myOwner = '';                 // populated by loadMe(), used by the envoi hero
 
+    const MAX_CHARS = 120;
+
     // ===== Textarea auto-resize =====
     function autosizeTextarea() {
       textEl.style.height = 'auto';
       textEl.style.height = Math.min(textEl.scrollHeight, 320) + 'px';
+    }
+
+    // ===== Compteur de caractères (vire à l'accent dès 90 %) =====
+    function updateCharCount() {
+      const n = textEl.value.length;
+      charCount.textContent = `${n}/${MAX_CHARS}`;
+      charCount.classList.toggle('near', n >= MAX_CHARS * 0.9);
     }
 
     // ===== Typing indicator (V6.2) =====
@@ -591,6 +673,7 @@
 
     textEl.addEventListener('input', () => {
       autosizeTextarea();
+      updateCharCount();
       if (textEl.value.trim() === '') stopTyping();
       else noteTyping();
     });
@@ -713,7 +796,9 @@
         const r = await fetch('/me');
         const { owner } = await r.json();
         myOwner = owner ?? '';
-        meLabel.innerHTML = `depuis <strong>${owner}</strong>`;
+        meLabel.innerHTML = owner
+          ? `<span class="wm-sep">·</span> ${escapeHtml(owner)}`
+          : '';
         renderHero();
       } catch {
         meLabel.textContent = '';
@@ -736,14 +821,13 @@
     function renderHero() {
       if (peers.length === 0) {
         envoiName.textContent = '…';
-        envoiMeta.textContent = myOwner ? `depuis ${myOwner.toLowerCase()}` : '';
+        envoiMeta.textContent = '';
         return;
       }
       const current = peers.find((p) => p.instanceId === targetSel.value) || peers[0];
       envoiName.textContent = current.owner.toLowerCase();
-      envoiMeta.textContent = myOwner
-        ? `depuis ${myOwner.toLowerCase()} · maintenant`
-        : 'maintenant';
+      // "depuis aurel" vit déjà dans le header → le meta ne porte que l'instant.
+      envoiMeta.textContent = 'maintenant';
     }
 
     peerPicker.addEventListener('click', (e) => {
@@ -836,6 +920,7 @@
         // Reset for next message
         textEl.value = '';
         textEl.style.height = '';
+        updateCharCount();
         options = [];
         ttlManuallySet = false;
         selectedPreset = '5min';
@@ -854,6 +939,7 @@
     // ===== Init =====
     renderChips();
     renderPresets();
+    updateCharCount();
     updatePresetExpiryHints();
     loadMe();
     loadPeers();
