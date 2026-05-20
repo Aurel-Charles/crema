@@ -23,14 +23,18 @@
       transition: background-color 1.5s ease, color 1.5s ease;
     }
 
+    /* Top-left controls: sit just right of the vertical crema·aurel
+     * watermark (idle-watermark lives at left:18). Row layout: moon, then
+     * presence — matches the agreed Mega-Type idle composition. */
     .topbar {
       position: absolute;
-      top: 24px;
-      right: 28px;
+      top: 22px;
+      left: 48px;
+      z-index: 40;
       display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 10px;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
       pointer-events: none;
     }
 
@@ -66,31 +70,6 @@
       fill: var(--crema-bg);
       stroke: var(--crema-bg);
     }
-    .dnd-btn .badge {
-      position: absolute;
-      top: -2px;
-      right: -4px;
-      min-width: 20px;
-      height: 20px;
-      padding: 0 6px;
-      background: var(--crema-accent);
-      color: var(--crema-bg);
-      font-size: 12px;
-      font-weight: 700;
-      border-radius: 999px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-    }
-    .dnd-btn .badge[hidden] { display: none; }
-    .dnd-btn.on .badge {
-      background: var(--crema-bg);
-      color: var(--crema-accent);
-      box-shadow: 0 0 0 2px var(--crema-accent);
-    }
-
     .presence {
       display: flex;
       align-items: center;
@@ -127,10 +106,12 @@
       30% { opacity: 1; }
     }
 
+    /* Transient toast moved to the top-right (presence now owns top-left). */
     #notif {
       position: absolute;
       top: 24px;
-      left: 28px;
+      right: 28px;
+      z-index: 45;
       max-width: 45vw;
       padding: 10px 14px;
       font-family: var(--crema-font-mono);
@@ -143,7 +124,7 @@
       border: 1px solid var(--crema-stroke);
       border-radius: 14px;
       opacity: 0;
-      transform: translateX(-12px);
+      transform: translateX(12px);
       transition: opacity 0.3s ease, transform 0.3s ease;
       pointer-events: none;
     }
@@ -158,25 +139,139 @@
       line-height: 1.15;
     }
 
-    .idle .clock {
-      font-family: var(--crema-font-serif);
-      font-style: italic;
-      font-size: clamp(96px, 22vw, 240px);
-      font-weight: 400;
+    /* ===== Mega Type idle (from "01 _ Display idle" canvas) =====
+     * Full-bleed composition: huge left-anchored clock, footer stats,
+     * left rainbow spine, crema·aurel watermark, corner sun glow.
+     * #screen.idle escapes the body flex-center and fills the viewport. */
+    #screen.idle {
+      position: absolute;
+      inset: 0;
+      max-width: none;
+      text-align: left;
+    }
+
+    /* Left rainbow spine — the Currents signature, reduced to a 14px edge.
+     * Replaces the bottom rainbow stripe (suppressed in idle below). */
+    .idle-spine {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 14px;
+      background: linear-gradient(180deg,
+        var(--band-2), var(--band-1), var(--band-7), var(--band-6), var(--band-4));
+      opacity: 0.9;
+    }
+
+    /* Sun glow bleeding off the top-right corner. */
+    .idle-glow {
+      position: absolute;
+      top: -160px;
+      right: -160px;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      background: radial-gradient(circle,
+        var(--band-2) 0%, var(--band-1) 48%, transparent 70%);
+      opacity: 0.5;
+      filter: blur(2px);
+      pointer-events: none;
+    }
+
+    /* Vertical brand/owner watermark on the far-left edge. */
+    .idle-watermark {
+      position: absolute;
+      left: 18px;
+      top: 28px;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      font-family: var(--crema-font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.35em;
       color: var(--crema-text);
-      letter-spacing: -0.04em;
+      opacity: 0.45;
+    }
+
+    .idle-clock {
+      position: absolute;
+      left: 64px;
+      top: 70px;
+      font-family: var(--crema-font-serif);
+      font-style: normal;
+      font-size: clamp(140px, 33vw, 280px);
+      font-weight: 400;
+      line-height: 0.9;
+      color: var(--crema-text);
+      letter-spacing: -0.045em;
       font-variant-numeric: tabular-nums;
-      text-shadow: 0 6px 40px rgba(232, 137, 110, 0.35);
       transition: color 1.5s ease;
     }
-    /* The date wears the .crema-label signature (set in markup) — same
-     * kerned-uppercase identity mark used by day headers in /history. */
-    .idle .date {
-      font-size: clamp(14px, 1.8vw, 22px);
+
+    /* Footer stats row — labels in tracked mono, values in serif. */
+    .idle-footer {
+      position: absolute;
+      left: 64px;
+      bottom: 28px;
+      display: flex;
+      align-items: flex-end;
+      gap: 22px;
+    }
+    .idle-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    #msg-stat {
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 22px;
+    }
+    #msg-stat[hidden] { display: none; }
+    .idle-stat-label {
+      font-family: var(--crema-font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.25em;
       color: var(--crema-muted);
-      margin-top: 18px;
-      transition: color 1.5s ease;
     }
+    .idle-stat-value {
+      font-family: var(--crema-font-serif);
+      font-size: 26px;
+      line-height: 1;
+      color: var(--crema-text);
+      font-variant-numeric: tabular-nums;
+    }
+    .idle-divider {
+      width: 1px;
+      align-self: stretch;
+      min-height: 40px;
+      background: var(--crema-text);
+      opacity: 0.28;
+    }
+    .msg-stat-body {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .msg-count {
+      color: var(--crema-accent-deep);
+      font-size: 26px;
+    }
+    .msg-from {
+      font-family: var(--crema-font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--crema-muted);
+      margin-left: 6px;
+    }
+
+    /* Suppress the old centered-idle decoration + the global Currents
+     * ripple / bottom rainbow stripe while idle. Message mode keeps them
+     * (theme.css :has(#screen.msg) rules are more specific and still win). */
+    #screen.idle::before { content: none; }
+    body.crema-display::before { opacity: 0; }
+    body.crema-display::after { opacity: 0; }
 
     @keyframes msg-enter {
       from { opacity: 0; transform: translateY(10px); }
@@ -283,17 +378,18 @@
       transform: scaleX(1);
     }
 
-    /* Shortcuts row in idle (V5) */
+    /* Shortcuts (V5) — vertical column on the right edge, tucked under the
+     * corner glow so it clears the left-anchored clock and footer stats. */
     #shortcuts-bar {
       position: absolute;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 132px;
+      right: 30px;
+      z-index: 40;
       display: flex;
+      flex-direction: column;
+      align-items: flex-end;
       gap: 12px;
-      max-width: 92vw;
-      flex-wrap: wrap;
-      justify-content: center;
+      max-width: 240px;
     }
     #shortcuts-bar:empty { display: none; }
     .shortcut-btn {
@@ -413,7 +509,6 @@
       <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
       </svg>
-      <span class="badge" hidden>0</span>
     </button>
     <div id="presence-list"></div>
   </header>
@@ -432,7 +527,7 @@
     const notifEl = document.getElementById('notif');
     const shortcutsBar = document.getElementById('shortcuts-bar');
     const dndBtn = document.getElementById('dnd-btn');
-    const dndBadge = dndBtn.querySelector('.badge');
+    let OWNER_NAME = '';
 
     const DEFAULT_DISPLAY_MS = 30_000;
     const REPLY_DISPLAY_MS = 10_000;
@@ -444,12 +539,16 @@
     const QUEUE_DRAIN_DELAY_MS = 600;
     const NOTIF_PREVIEW_MAX_CHARS = 36;
 
-    const dateFmt = new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'long', day: 'numeric', month: 'long',
-    });
+    const weekdayFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long' });
     const timeFmt = new Intl.DateTimeFormat('fr-FR', {
       hour: '2-digit', minute: '2-digit', hour12: false,
     });
+    // Compact footer date — "lundi 18.05" per the Mega Type canvas.
+    function formatDateCompact(d) {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${weekdayFmt.format(d)} ${dd}.${mm}`;
+    }
 
     // ===== State =====
     let mode = 'idle';
@@ -497,11 +596,28 @@
     // ===== Render =====
     function renderIdle() {
       const now = new Date();
+      const mode = document.body.classList.contains('day') ? 'jour' : 'nuit';
       screen.className = 'idle';
       screen.innerHTML = `
-        <div class="clock">${timeFmt.format(now)}</div>
-        <div class="date crema-label">${dateFmt.format(now)}</div>
+        <div class="idle-spine"></div>
+        <div class="idle-glow"></div>
+        <div class="idle-watermark">crema · ${escapeHtml(OWNER_NAME.toLowerCase())}</div>
+        <div class="idle-clock">${timeFmt.format(now)}</div>
+        <footer class="idle-footer">
+          <div class="idle-stat">
+            <span class="idle-stat-label">${mode}</span>
+            <span class="idle-stat-value">${escapeHtml(formatDateCompact(now))}</span>
+          </div>
+          <div class="idle-stat" id="msg-stat" hidden>
+            <span class="idle-divider"></span>
+            <div class="msg-stat-body">
+              <span class="idle-stat-label">messages</span>
+              <span class="idle-stat-value"><span class="msg-count">0</span><span class="msg-from"></span></span>
+            </div>
+          </div>
+        </footer>
       `;
+      updateMsgStat();
     }
 
     function showIdle() {
@@ -655,20 +771,25 @@
       dndBtn.classList.toggle('on', dndEnabled);
     }
 
-    function updateBadge() {
+    // Footer "messages · NN · de flo" stat — live count of held messages
+    // (queued under DND or while another is on screen). Only exists in the
+    // idle DOM, so this is a no-op in message mode; renderIdle re-syncs it.
+    function updateMsgStat() {
+      const stat = document.getElementById('msg-stat');
+      if (!stat) return;
       const n = messageQueue.length;
-      if (n === 0) {
-        dndBadge.hidden = true;
-      } else {
-        dndBadge.hidden = false;
-        dndBadge.textContent = String(n);
-      }
+      if (n === 0) { stat.hidden = true; return; }
+      stat.hidden = false;
+      stat.querySelector('.msg-count').textContent = String(n).padStart(2, '0');
+      const last = messageQueue[messageQueue.length - 1];
+      const from = last && last.from ? last.from : '';
+      stat.querySelector('.msg-from').textContent = from ? ` de ${from}` : '';
     }
 
     function queueIncoming(data) {
       if (messageQueue.length >= QUEUE_CAP) messageQueue.shift();
       messageQueue.push(data);
-      updateBadge();
+      updateMsgStat();
       const sender = data.from ? `${data.from} · ` : '';
       const ts = timeFmt.format(new Date(data.arrivedAt));
       showNotif(`${sender}${ts} · ${truncate(data.text, NOTIF_PREVIEW_MAX_CHARS)}`);
@@ -677,7 +798,7 @@
     function maybeDrainNext() {
       if (messageQueue.length === 0 || dndEnabled || mode !== 'idle') return;
       const next = messageQueue.shift();
-      updateBadge();
+      updateMsgStat();
       setTimeout(() => {
         if (mode === 'idle' && !dndEnabled) showMessage(next);
       }, QUEUE_DRAIN_DELAY_MS);
@@ -715,6 +836,19 @@
       } catch {}
     }
     loadDnd();
+
+    // Owner of this Pi — drives the crema·<owner> idle watermark.
+    async function loadOwner() {
+      try {
+        const r = await fetch('/me');
+        const data = await r.json();
+        if (data.owner) {
+          OWNER_NAME = data.owner;
+          if (mode === 'idle') renderIdle();
+        }
+      } catch {}
+    }
+    loadOwner();
 
     // ===== Reply handling + tap-to-dismiss =====
     screen.addEventListener('click', async (e) => {
@@ -798,8 +932,11 @@
       const sunrise = new Date(schedule.sunrise);
       const sunset = new Date(schedule.sunset);
       const isDay = now >= sunrise && now < sunset;
+      const wasDay = document.body.classList.contains('day');
       document.body.classList.toggle('day', isDay);
       document.body.classList.toggle('night', !isDay);
+      // Re-render so the footer jour/nuit label tracks the flip.
+      if (isDay !== wasDay && mode === 'idle') renderIdle();
     }
 
     function scheduleMidnightRefresh() {
