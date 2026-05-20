@@ -505,26 +505,17 @@
       }
     }
 
-    /* ===== Message exit — fade + rise, staggered; the chosen reply lingers
-     * last and flies off to the right. Driven by #screen.exiting (id keeps it
-     * specific enough to beat the entrance .run rules). ===== */
+    /* ===== Message exit — mirror of the entrance: elements fade + sink
+     * down (the reverse of word-in's rise), in the same staggered cascade.
+     * #screen.exiting (id) keeps it ahead of the entrance .run rules. ===== */
     #screen.exiting .msg-top,
+    #screen.exiting .msg-text .word,
     #screen.exiting .msg-hint,
-    #screen.exiting .reply-btn:not(.sent) {
-      animation: exit-rise 220ms cubic-bezier(0.4, 0, 0.7, 0.3) both;
+    #screen.exiting .reply-btn {
+      animation: msg-out 300ms cubic-bezier(0.4, 0, 0.8, 0.4) both;
     }
-    #screen.exiting .msg-text .word {
-      animation: exit-rise 230ms cubic-bezier(0.4, 0, 0.7, 0.3) both;
-    }
-    /* Chosen reply: a fast accelerating whoosh off the right edge (a "send"). */
-    #screen.exiting .reply-btn.sent {
-      animation: exit-right 240ms cubic-bezier(0.5, 0, 0.85, 0.4) both;
-    }
-    @keyframes exit-rise {
-      to { opacity: 0; transform: translateY(-0.4em); }
-    }
-    @keyframes exit-right {
-      to { opacity: 0; transform: translateX(240px); }
+    @keyframes msg-out {
+      to { opacity: 0; transform: translateY(0.3em); }
     }
     @media (prefers-reduced-motion: reduce) {
       #screen.exiting .msg-top,
@@ -870,15 +861,15 @@
     }
 
     // ===== Message exit animation =====
-    // Fade + rise the message out with a per-element stagger; a chosen reply
-    // (the .sent button) lingers last and flies off to the right, then we
-    // finally render idle. Used for every message→idle transition.
+    // Mirror of the entrance: the pieces fade + sink out in a staggered
+    // cascade (the reverse of word-in), then we render idle. Used for every
+    // message→idle transition.
     function leaveMessage() {
       if (mode !== 'message') { showIdle(); return; }
       mode = 'leaving';
       if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
 
-      // Reduced motion: skip the choreography, go idle promptly.
+      // Reduced motion: skip the cascade, go idle promptly.
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         screen.classList.add('exiting');
         resetTimer = setTimeout(showIdle, 120);
@@ -887,34 +878,23 @@
 
       const setDelay = (el, ms) => { if (el) el.style.animationDelay = ms + 'ms'; };
 
-      // Group A — everything but the chosen reply — leaves separately, in a
-      // quick stagger: hint, then header, then the words, then other buttons.
-      setDelay(screen.querySelector('.msg-hint'), 0);
-      setDelay(screen.querySelector('.msg-top'), 45);
+      // Mirror the entrance: words sink + fade out left→right, then the hint
+      // and reply buttons follow — same cascade as word-in, reversed motion.
+      setDelay(screen.querySelector('.msg-top'), 0);
       const words = screen.querySelectorAll('.msg-text .word');
-      const wstag = Math.min(14, 700 / Math.max(1, words.length));
-      let wordsEnd = 0;
+      const stag = Math.min(26, 500 / Math.max(1, words.length));
+      let lastWord = 0;
       words.forEach((w, i) => {
-        const d = 70 + Math.round(i * wstag);
+        const d = Math.round(i * stag);
         w.style.animationDelay = d + 'ms';
-        wordsEnd = Math.max(wordsEnd, d + 230);
+        lastWord = Math.max(lastWord, d);
       });
-      screen.querySelectorAll('.reply-btn:not(.sent)').forEach((b, i) => setDelay(b, 60 + i * 30));
-
-      const groupAEnd = Math.max(wordsEnd, 265);
-      let total = groupAEnd;
-
-      // The chosen reply lingers a beat alone, then shoots off to the right.
-      // Capped so a long message doesn't make it wait.
-      const sent = screen.querySelector('.reply-btn.sent');
-      if (sent) {
-        const d = Math.min(groupAEnd, 380) + 25;
-        sent.style.animationDelay = d + 'ms';
-        total = Math.max(total, d + 240);
-      }
+      const tail = lastWord + 50;
+      setDelay(screen.querySelector('.msg-hint'), tail);
+      screen.querySelectorAll('.reply-btn').forEach((b) => setDelay(b, tail));
 
       screen.classList.add('exiting');
-      resetTimer = setTimeout(showIdle, total + 30);
+      resetTimer = setTimeout(showIdle, tail + 300 + 40);
     }
 
     function renderPresence() {
@@ -1086,7 +1066,7 @@
         btn.classList.add('sent');
         btn.textContent = '✓ ' + reply.label;
         if (resetTimer) clearTimeout(resetTimer);
-        // Return to idle via the exit animation — this .sent button flies right.
+        // Return to idle via the mirror exit animation after a brief beat.
         resetTimer = setTimeout(leaveMessage, REPLY_RETURN_DELAY_MS);
       } catch {
         btn.classList.add('failed');
