@@ -691,7 +691,6 @@
     // ===== Render =====
     function renderIdle() {
       const now = new Date();
-      const mode = document.body.classList.contains('day') ? 'jour' : 'nuit';
       screen.className = 'idle';
       screen.innerHTML = `
         <div class="idle-spine"></div>
@@ -700,7 +699,6 @@
         <div class="idle-clock">${timeFmt.format(now)}</div>
         <footer class="idle-footer">
           <div class="idle-stat">
-            <span class="idle-stat-label">${mode}</span>
             <span class="idle-stat-value">${escapeHtml(formatDateCompact(now))}</span>
           </div>
           <div class="idle-stat" id="msg-stat" hidden>
