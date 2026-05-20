@@ -370,12 +370,22 @@
       flex-shrink: 0;
       font-variant-numeric: tabular-nums;
     }
+    /* Header rule doubles as the TTL track: a faint full line, with an
+     * accent fill that depletes left→right when the message has an expiry
+     * (V4). No expiry → just the faint line. */
     .msg-rule {
       flex: 1;
-      height: 1px;
+      height: 2px;
       min-width: 16px;
-      background: var(--crema-text);
-      opacity: 0.28;
+      background: rgba(42, 26, 68, 0.22);
+      overflow: hidden;
+    }
+    .msg-rule-fill {
+      width: 100%;
+      height: 100%;
+      background: var(--crema-accent);
+      transform-origin: left center;
+      transform: scaleX(1);
     }
     .msg-quote {
       flex-shrink: 1;
@@ -479,13 +489,11 @@
       background: var(--crema-accent);
       border-color: var(--crema-accent);
       color: var(--crema-accent-ink);
-      opacity: 1 !important;
     }
     .reply-btn.failed {
       background: rgba(179, 38, 30, 0.15);
       border-color: var(--crema-danger);
       color: var(--crema-danger);
-      opacity: 1 !important;
     }
 
     /* Accessibility / safety net: no motion → everything visible at once. */
@@ -497,21 +505,31 @@
       }
     }
 
-    /* TTL progress (V4) — thin bar pinned to the very bottom; only rendered
-     * when the message carries an expiry. */
-    .progress {
-      position: absolute;
-      left: 0; right: 0; bottom: 0;
-      height: 3px;
-      background: rgba(42, 26, 68, 0.12);
-      overflow: hidden;
+    /* ===== Message exit — fade + rise, staggered; the chosen reply lingers
+     * last and flies off to the right. Driven by #screen.exiting (id keeps it
+     * specific enough to beat the entrance .run rules). ===== */
+    #screen.exiting .msg-top,
+    #screen.exiting .msg-hint,
+    #screen.exiting .reply-btn:not(.sent) {
+      animation: exit-rise 300ms cubic-bezier(0.4, 0, 0.7, 0.3) both;
     }
-    .progress-fill {
-      width: 100%;
-      height: 100%;
-      background: var(--crema-accent);
-      transform-origin: left center;
-      transform: scaleX(1);
+    #screen.exiting .msg-text .word {
+      animation: exit-rise 320ms cubic-bezier(0.4, 0, 0.7, 0.3) both;
+    }
+    #screen.exiting .reply-btn.sent {
+      animation: exit-right 400ms cubic-bezier(0.4, 0, 0.6, 1) both;
+    }
+    @keyframes exit-rise {
+      to { opacity: 0; transform: translateY(-0.45em); }
+    }
+    @keyframes exit-right {
+      to { opacity: 0; transform: translateX(48px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #screen.exiting .msg-top,
+      #screen.exiting .msg-hint,
+      #screen.exiting .reply-btn,
+      #screen.exiting .msg-text .word { animation: none !important; opacity: 0 !important; }
     }
 
     /* Shortcuts (V5) — vertical column on the right edge, tucked under the
@@ -728,7 +746,7 @@
       const ttl = expiresAtMs
         ? Math.max(MIN_DISPLAY_MS, expiresAtMs - Date.now())
         : (data.isReply ? REPLY_DISPLAY_MS : DEFAULT_DISPLAY_MS);
-      resetTimer = setTimeout(showIdle, ttl);
+      resetTimer = setTimeout(leaveMessage, ttl);
 
       if (expiresAtMs) startProgressAnimation(ttl);
 
@@ -750,7 +768,11 @@
       const quote = (isReply && replyToText)
         ? `<div class="msg-quote">«&nbsp;${escapeHtml(truncate(replyToText, REPLY_CONTEXT_MAX_CHARS))}&nbsp;»</div>`
         : '';
-      const header = `<header class="msg-top">${avatar}${sender}${ago}<div class="msg-rule"></div>${quote}</header>`;
+      // The header rule carries the TTL bar (depletes) when there's an expiry.
+      const rule = currentMsg.expiresAtMs
+        ? '<div class="msg-rule"><div class="msg-rule-fill"></div></div>'
+        : '<div class="msg-rule"></div>';
+      const header = `<header class="msg-top">${avatar}${sender}${ago}${rule}${quote}</header>`;
 
       // Word-by-word cascade. Accent the last word in pink only when the
       // message is a question/exclamation (decision: accent on ?/!).
@@ -770,16 +792,12 @@
         : '';
       const foot = `<footer class="msg-foot">${hint}${bar}</footer>`;
 
-      const progress = currentMsg.expiresAtMs
-        ? '<div class="progress"><div class="progress-fill"></div></div>'
-        : '';
-
       const furniture =
         '<div class="msg-spine"></div><div class="msg-glow"></div>' +
         '<div class="msg-watermark">crema · message</div>';
 
       screen.className = 'msg';
-      screen.innerHTML = `${furniture}${header}${body}${foot}${progress}`;
+      screen.innerHTML = `${furniture}${header}${body}${foot}`;
 
       fitMessageText();
       if (document.fonts && document.fonts.ready) {
@@ -840,14 +858,44 @@
     }
 
     function startProgressAnimation(durationMs) {
-      const fill = screen.querySelector('.progress-fill');
+      const fill = screen.querySelector('.msg-rule-fill');
       if (!fill) return;
-      // Reset to full, force reflow, then animate to empty over the TTL.
+      // Reset to full, force reflow, then deplete to empty over the TTL.
       fill.style.transition = 'none';
       fill.style.transform = 'scaleX(1)';
       void fill.offsetHeight;
       fill.style.transition = `transform ${durationMs}ms linear`;
       fill.style.transform = 'scaleX(0)';
+    }
+
+    // ===== Message exit animation =====
+    // Fade + rise the message out with a per-element stagger; a chosen reply
+    // (the .sent button) lingers last and flies off to the right, then we
+    // finally render idle. Used for every message→idle transition.
+    function leaveMessage() {
+      if (mode !== 'message') { showIdle(); return; }
+      mode = 'leaving';
+      if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
+
+      const words = screen.querySelectorAll('.msg-text .word');
+      const stagger = Math.min(22, 900 / Math.max(1, words.length));
+      let lastEnd = 300; // header/hint baseline (exit-rise duration)
+      words.forEach((w, i) => {
+        const d = Math.round(i * stagger);
+        w.style.animationDelay = d + 'ms';
+        lastEnd = Math.max(lastEnd, d + 320);
+      });
+
+      let total = lastEnd;
+      const sent = screen.querySelector('.reply-btn.sent');
+      if (sent) {
+        const d = lastEnd + 120;
+        sent.style.animationDelay = d + 'ms';
+        total = d + 400;
+      }
+
+      screen.classList.add('exiting');
+      resetTimer = setTimeout(showIdle, total + 40);
     }
 
     function renderPresence() {
@@ -989,7 +1037,7 @@
 
       // Tap anywhere outside a reply button → dismiss the current message.
       if (!btn) {
-        if (mode === 'message') showIdle();
+        if (mode === 'message') leaveMessage();
         return;
       }
 
@@ -1019,7 +1067,8 @@
         btn.classList.add('sent');
         btn.textContent = '✓ ' + reply.label;
         if (resetTimer) clearTimeout(resetTimer);
-        resetTimer = setTimeout(showIdle, REPLY_RETURN_DELAY_MS);
+        // Return to idle via the exit animation — this .sent button flies right.
+        resetTimer = setTimeout(leaveMessage, REPLY_RETURN_DELAY_MS);
       } catch {
         btn.classList.add('failed');
         btn.textContent = '✕ ' + reply.label;
@@ -1176,9 +1225,9 @@
       // Stamp the arrival time so the "il y a Xs" subtitle stays honest
       // even if the message sits in the queue for a while.
       data.arrivedAt = Date.now();
-      // Hold the message back if we're already showing one or DND is on.
-      // It'll be drained later from the queue.
-      if (mode === 'message' || dndEnabled) {
+      // Hold the message back if one is showing/leaving or DND is on — it'll
+      // be drained from the queue once we're back to idle.
+      if (mode !== 'idle' || dndEnabled) {
         queueIncoming(data);
       } else {
         showMessage(data);
