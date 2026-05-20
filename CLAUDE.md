@@ -4,25 +4,41 @@ Système de messagerie local entre deux Raspberry Pi (4B + 3B+) équipés à ter
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
-## Étape actuelle : V0 (MVP mono-Pi)
+## Étape actuelle : ~V6.2 (P2P complet, en fonctionnement)
 
-**Objectif** : prouver que la chaîne *téléphone → serveur Node → WebSocket → écran d'affichage* fonctionne, sur un seul Pi, sans rien d'autre.
+La roadmap V0→V6 est livrée et tourne sur les deux Pi. Crema est aujourd'hui un
+**système pair-à-pair symétrique complet** : code identique sur chaque Pi,
+découverte mDNS automatique, messages/réponses/raccourcis/TTL, historique
+SQLite, accusés "vu" (V6.1) et indicateur de frappe (V6.2). **Aucun serveur
+central** — le "serveur" du projet = le process Node qui tourne sur chaque Pi.
 
-**Comportement attendu** :
-- Le Pi affiche `Prêt` en grand sur l'écran (idle statique pour le V0)
-- Depuis le téléphone : accès à `http://pi-aurel.local:3000`
-- Champ texte + bouton "Envoyer"
-- À l'envoi, le message s'affiche sur l'écran pendant 30 secondes, puis retour à `Prêt`
+**Architecture en place** :
+- **Découverte** : `peers.js` — chaque Pi s'annonce et browse le service mDNS
+  `crema`, maintient une `peerMap`. Health-check `/me` toutes les 10s (drop
+  après 3 échecs) + recréation advertisement/browser toutes les 2h (anti-rust,
+  cf. décrochage mDNS observé à ~4h). Voir mémoire `mdns-on-raspberry-pi`.
+- **Transport** : échanges HTTP **directs de Pi à Pi** vers l'IP du pair —
+  `POST /inbox` (messages), `/reply`, `/read-receipt` (V6.1), `/typing` (V6.2).
+  Un retry avec re-résolution `.local` sur premier échec.
+- **État** : chaque Pi a **son propre SQLite** (`db.js`), ses pending messages
+  avec timers TTL, son historique. Pas de duplication entre Pi.
+- **Idle** : horloge + thème jour/nuit (SunCalc, `/theme-schedule`), présence du
+  pair, raccourcis tactiles.
 
-**Hors scope V0** : mDNS, horloge stylée, réponses tactiles, TTL configurable, raccourcis, autostart, kiosk auto, multi-Pi. Tout ça arrive aux versions suivantes.
+**Fichiers** :
+- `server.js` — Express + Socket.IO, routes pages + API (`/me`, `/peers`, `/theme-schedule`, `/history.json`, `/logs.json`)
+- `config.js` — env/identité (`OWNER`, `INSTANCE_ID`, ports, bornes TTL)
+- `peers.js` — découverte mDNS + health-check + dedup same-owner
+- `messaging.js` — pipeline d'envoi/réponse/inbox/accusés/typing
+- `store.js` — réponses par défaut, raccourcis, DND (JSON dans `data/`)
+- `db.js` — historique SQLite
+- `logger.js` — logs structurés vers `/logs` + Socket.IO
+- `public/` — `index.html` (PWA), `display.html` (écran), `settings.html`, `history.html`, `logs.html`, `theme.css`
+- `install-pi.sh`, `start.sh`, `start-display.sh` — setup/lancement Pi
 
-**Fichiers à créer** :
-- `server.js` — Express + Socket.IO, routes `/` (sender) et `/display` (Pi)
-- `public/index.html` — formulaire d'envoi (interface tel)
-- `public/display.html` — écran d'affichage, écoute WebSocket
-- `package.json`
-
-**Démarrage manuel pour le V0** : `node server.js` sur le Pi, Chromium ouvert à la main vers `http://localhost:3000/display`.
+**Réflexion en cours** : envisager un *broker WebSocket sur serveur LAN* pour
+supprimer mDNS (sa fragilité reste la principale source de friction). Casserait
+le "no single point of failure" actuel — décision non tranchée.
 
 ## Pré-requis matériel/setup
 
@@ -37,27 +53,44 @@ Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d
 
 - **Source de vérité** : repo Git sur GitHub (privé)
 - **Édition** : Claude Code sur Mac, repo cloné en local
-- **Déploiement Pi** : `git pull` manuel pour le V0 ; automatisation (webhook ou GitHub Actions ssh) à partir du V2
-- **Pas de CI/CD au V0**
+- **Déploiement Pi** : `git pull` manuel sur chaque Pi (+ `install-pi.sh` pour le setup initial) ; automatisation (webhook / GitHub Actions ssh) toujours envisageable mais pas en place
+- **Pas de CI/CD** pour l'instant
+
+## Tests de stabilité
+
+`stability-test.js` (npm script : `npm run stability-test`) est un harness de probing externe à faire tourner sur les deux Pi en parallèle pour détecter décrochages mDNS, redémarrages serveur, échecs HTTP cross-Pi et soucis système (temp CPU, Wi-Fi). Output : JSONL dans `./logs/stability-<host>-<date>.jsonl`.
+
+Sondes :
+- `/me` localhost toutes les 5s (rotation `instanceId` = restart serveur détecté)
+- `/peers` localhost toutes les 15s (mDNS toujours visible ?)
+- `/me` peer toutes les 30s (HTTP cross-Pi)
+- temp CPU / load / RAM / signal Wi-Fi toutes les 60s
+- heartbeat console + résumé horaire + résumé final propre sur SIGINT
+
+Lancement typique (runs longs, 24h+) : SSH sur chaque Pi, `TERM=xterm-256color tmux new -d -s stab 'npm run stability-test'`. Le préfixe `TERM=` contourne le souci ghostty SSH. Réattacher : `tmux attach -t stab`. Stopper proprement (déclenche le `summary:final`) : `Ctrl+C` dans le tmux ou `tmux send-keys -t stab C-c` depuis l'extérieur.
+
+Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -x | grep reboot`.
 
 ## Stack technique
 
 - **Backend** : Node.js 20 + Express + Socket.IO
 - **Frontend** : HTML/CSS/JS vanilla (pas de framework au V0 ; possibilité de migrer vers React/Vue plus tard si pertinent)
-- **Persistence** : aucune au V0, SQLite à partir du V4
-- **Découverte réseau** : mDNS via `bonjour-service` à partir du V1
+- **Persistence** : SQLite (`db.js`) pour l'historique ; JSON (`store.js`) pour réponses/raccourcis/DND
+- **Découverte réseau** : mDNS via le paquet `mdns` (PAS `bonjour-service` — abandonné, voir mémoire `mdns-on-raspberry-pi` pour les patches libavahi/resolverSequence obligatoires sur Pi)
 
 ## Roadmap
 
-- **V0** — MVP mono-Pi, message s'affiche 30s, idle statique `Prêt`
-- **V1** — Second Pi + découverte mDNS automatique + sélection destinataire dans la PWA
-- **V2** — Idle state propre : horloge + veilleuse jour/nuit + présence du Pi distant ("Flo en ligne")
-- **V3** — Réponses rapides par défaut (boutons tactiles configurables, dispos sur tout message reçu)
-- **V4** — Options de réponse personnalisées à l'envoi + TTL avec smart defaults + mini barre de progression d'expiration
-- **V5** — Raccourcis d'envoi sur l'écran tactile, créés/édités depuis la PWA
-- **V6** — Historique conversations (SQLite), accusés "vu", présence temps réel
+- ✅ **V0** — MVP mono-Pi, message s'affiche 30s, idle statique `Prêt`
+- ✅ **V1** — Second Pi + découverte mDNS automatique + sélection destinataire dans la PWA
+- ✅ **V2** — Idle state propre : horloge + veilleuse jour/nuit + présence du Pi distant ("Flo en ligne")
+- ✅ **V3** — Réponses rapides par défaut (boutons tactiles configurables, dispos sur tout message reçu)
+- ✅ **V4** — Options de réponse personnalisées à l'envoi + TTL avec smart defaults + mini barre de progression d'expiration
+- ✅ **V5** — Raccourcis d'envoi sur l'écran tactile, créés/édités depuis la PWA
+- ✅ **V6** — Historique conversations (SQLite), accusés "vu" (V6.1), indicateur de frappe (V6.2)
 
-Chaque version est indépendamment utile. On peut s'arrêter à V3 si ça suffit déjà.
+Roadmap initiale livrée. Pistes ouvertes : broker LAN (anti-mDNS), accès hors
+domicile, multi-Pi par personne (labels de pièce). Chaque version est restée
+indépendamment utile.
 
 ## Architecture cible (V1+)
 
