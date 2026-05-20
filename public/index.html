@@ -30,67 +30,26 @@
      * Mobile-first. Sur ≥600px le PWA cesse de s'étirer et devient une "carte"
      * crème posée sur le gradient chaud — lisible jusqu'au desktop. */
     .app {
+      position: relative;
       flex: 1;
       display: flex;
       flex-direction: column;
       width: 100%;
     }
-    /* Liseret arc-en-ciel — signature partagée avec l'écran idle (Display).
-     * Dernier enfant flex → collé tout en bas du panneau (ou du viewport sur
-     * mobile). Clippé par les coins arrondis de la carte en ≥600px. */
+    /* Liseret arc-en-ciel vertical — signature partagée avec l'écran idle.
+     * Barre fine sur le bord GAUCHE du panneau (full height). Clippée par les
+     * coins arrondis de la carte en ≥600px ; bord d'écran sur mobile. */
     .app::after {
       content: "";
-      flex-shrink: 0;
-      height: 3px;
-      background: var(--crema-rainbow);
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(180deg,
+        var(--band-1), var(--band-2), var(--band-3), var(--band-4),
+        var(--band-5), var(--band-6), var(--band-7));
       opacity: 0.9;
-    }
-    @media (min-width: 600px) {
-      body {
-        align-items: center;
-        justify-content: center;
-        padding: max(env(safe-area-inset-top), 32px) 24px 32px;
-      }
-      .app {
-        flex: 0 1 auto;
-        max-width: 600px;
-        margin: auto;
-        background: var(--crema-bg);
-        border: 1px solid var(--crema-stroke);
-        border-radius: 28px;
-        box-shadow: 0 30px 90px -45px rgba(196, 101, 156, 0.5),
-                    0 2px 8px -4px rgba(42, 26, 68, 0.12);
-        overflow: hidden;
-      }
-      header { padding-top: 28px; }
-      form { padding: 24px 28px 28px; }
-    }
-    /* ===== Desktop ≥900px — deux colonnes : destinataire | composition ===== */
-    @media (min-width: 900px) {
-      .app { max-width: 920px; }
-      header { padding-left: 32px; padding-right: 32px; }
-      form {
-        display: grid;
-        grid-template-columns: minmax(300px, 340px) 1fr;
-        column-gap: 40px;
-        row-gap: 18px;
-        align-content: start;
-        padding: 28px 32px 32px;
-      }
-      /* Colonne 1 — le hero destinataire, collé en haut */
-      .envoi-field {
-        grid-column: 1;
-        grid-row: 1;
-        align-self: start;
-        position: sticky;
-        top: 28px;
-      }
-      .envoi-hero { padding-top: 4px; }
-      /* Colonne 2 — message, options, disponible, status, envoi */
-      form > .field:not(.envoi-field),
-      form > .status,
-      form > .send-btn { grid-column: 2; }
-      .send-btn { margin-top: 4px; }  /* pas de push auto en grille */
     }
 
     header {
@@ -556,6 +515,59 @@
     }
     .status.ok { color: var(--crema-accent-ink); font-weight: 600; }
     .status.err { color: var(--crema-danger); }
+
+    /* ===== Responsive — placé EN FIN de feuille pour gagner en ordre de
+     * cascade sur les règles de base (form/header) de même spécificité. ===== */
+
+    /* Tablette / desktop ≥600px : le PWA devient un panneau crème centré. */
+    @media (min-width: 600px) {
+      body {
+        align-items: center;
+        justify-content: center;
+        padding: max(env(safe-area-inset-top), 32px) 24px 32px;
+      }
+      .app {
+        flex: 0 1 auto;
+        max-width: 600px;
+        margin: auto;
+        background: var(--crema-bg);
+        border: 1px solid var(--crema-stroke);
+        border-radius: 28px;
+        box-shadow: 0 30px 90px -45px rgba(196, 101, 156, 0.5),
+                    0 2px 8px -4px rgba(42, 26, 68, 0.12);
+        overflow: hidden;
+      }
+      header { padding: 28px 28px 0; }
+      form { padding: 24px 28px 28px; }
+    }
+
+    /* Desktop ≥900px : deux colonnes — destinataire (sticky) | composition. */
+    @media (min-width: 900px) {
+      .app { max-width: 920px; }
+      header { padding: 28px 36px 0; }
+      form {
+        display: grid;
+        grid-template-columns: minmax(280px, 320px) 1fr;
+        column-gap: 44px;
+        row-gap: 18px;
+        align-content: start;
+        padding: 28px 36px 36px;
+      }
+      /* Colonne 1 — le hero destinataire, collé en haut */
+      .envoi-field {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: start;
+        position: sticky;
+        top: 28px;
+      }
+      .envoi-hero { padding-top: 4px; }
+      /* Colonne 2 — message, options, disponible, status, envoi */
+      form > .field:not(.envoi-field),
+      form > .status,
+      form > .send-btn { grid-column: 2; }
+      .send-btn { margin-top: 4px; }  /* pas de push auto en grille */
+    }
   </style>
 </head>
 <body>
