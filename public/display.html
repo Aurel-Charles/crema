@@ -13,14 +13,33 @@
       font-family: var(--crema-font-sans);
       background: var(--crema-bg);
       color: var(--crema-text);
-      min-height: 100vh;
-      padding: 32px;
+      height: 100vh;
+      padding: 0;
       overflow: hidden;
       cursor: none;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: background-color 1.5s ease, color 1.5s ease;
+    }
+
+    /* ===== Responsive: 800×480 stage, scaled to fit any viewport =====
+     * The whole UI is authored in the Pi's native 800×480 (5:3) coordinate
+     * space, then scaled as one block (transform) so it stays pixel-faithful
+     * on phone / tablet / desktop. --stage-scale is computed in JS on resize.
+     * The warm body gradient fills the letterbox around it. */
+    .stage {
+      position: relative;
+      flex: none;
+      width: 800px;
+      height: 480px;
+      transform: scale(var(--stage-scale, 1));
+      transform-origin: center center;
+      /* Centers the in-flow #screen.msg; absolutely-positioned children
+       * (idle layout, topbar, notif, shortcuts) ignore flex. */
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* Top-left controls: sit just right of the vertical crema·aurel
@@ -199,7 +218,7 @@
       top: 70px;
       font-family: var(--crema-font-serif);
       font-style: normal;
-      font-size: clamp(140px, 33vw, 280px);
+      font-size: 260px;
       font-weight: 400;
       line-height: 0.9;
       color: var(--crema-text);
@@ -266,12 +285,77 @@
       margin-left: 6px;
     }
 
-    /* Suppress the old centered-idle decoration + the global Currents
-     * ripple / bottom rainbow stripe while idle. Message mode keeps them
-     * (theme.css :has(#screen.msg) rules are more specific and still win). */
+    /* Message mode: in-flow, flex-centered by .stage. Kept transform-free so
+     * the .msg enter animation (which animates transform) doesn't fight a
+     * centering transform. */
+    #screen.msg {
+      width: 100%;
+      max-width: 760px;
+      padding: 0 24px;
+    }
+
+    /* Kill the old centered-idle sun disc (theme.css #screen.idle::before). */
     #screen.idle::before { content: none; }
-    body.crema-display::before { opacity: 0; }
-    body.crema-display::after { opacity: 0; }
+
+    /* The Currents ripple + bottom rainbow stripe/plinth must live INSIDE the
+     * scaled stage (a transformed ancestor creates a stacking context, so the
+     * viewport-fixed theme.css versions would mis-layer once scaled). We
+     * disable those here and re-author them on .stage. vw/vh become % of the
+     * 800×480 stage — identical at scale 1, correct at every other scale. */
+    body.crema-display::before,
+    body.crema-display::after { content: none; }
+
+    /* Currents ripple — suppressed in idle, raised in message mode. */
+    .stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      filter: blur(0.4px);
+      transition: opacity 0.4s ease;
+      background-image:
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 14.5%, rgba(232,137,110,0.55) 15% 15.3%, transparent 15.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 21.5%, rgba(232,178,94,0.50)  22% 22.3%, transparent 22.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 28.5%, rgba(217,210,119,0.45) 29% 29.3%, transparent 29.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 35.5%, rgba(125,192,176,0.45) 36% 36.3%, transparent 36.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 42.5%, rgba(111,155,209,0.45) 43% 43.3%, transparent 43.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 49.5%, rgba(166,133,201,0.45) 50% 50.3%, transparent 50.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 56.5%, rgba(196,111,161,0.45) 57% 57.3%, transparent 57.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 63.5%, rgba(166,133,201,0.40) 64% 64.3%, transparent 64.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 70.5%, rgba(111,155,209,0.38) 71% 71.3%, transparent 71.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 77.5%, rgba(125,192,176,0.35) 78% 78.3%, transparent 78.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 84.5%, rgba(217,210,119,0.30) 85% 85.3%, transparent 85.8% 100%),
+        radial-gradient(ellipse 110% 28% at 30% 65%, transparent 0 91.5%, rgba(232,178,94,0.28)  92% 92.3%, transparent 92.8% 100%);
+    }
+    body.crema-display:has(#screen.msg) .stage::before { opacity: 0.82; }
+
+    /* Bottom signature: rainbow stripe (suppressed in idle — the left spine
+     * takes over) / plinth + stripe in message mode. */
+    .stage::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: var(--crema-rainbow);
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0;
+      transition: height 0.4s ease, background 0.4s ease, opacity 0.4s ease;
+    }
+    body.crema-display:has(#screen.msg) .stage::after {
+      height: 110px;
+      background:
+        linear-gradient(180deg, transparent 0%, var(--crema-plinth, #2A1F44) 100%),
+        var(--crema-rainbow);
+      background-repeat: no-repeat, no-repeat;
+      background-size: 100% 100%, 100% 3px;
+      background-position: 0 0, 0 100%;
+      opacity: 1;
+    }
 
     @keyframes msg-enter {
       from { opacity: 0; transform: translateY(10px); }
@@ -504,6 +588,7 @@
   </style>
 </head>
 <body class="crema-display night">
+  <div class="stage">
   <header class="topbar">
     <button id="dnd-btn" class="dnd-btn" type="button" aria-label="Ne pas déranger">
       <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -518,6 +603,7 @@
   <main id="screen"></main>
 
   <footer id="shortcuts-bar"></footer>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
@@ -528,6 +614,18 @@
     const shortcutsBar = document.getElementById('shortcuts-bar');
     const dndBtn = document.getElementById('dnd-btn');
     let OWNER_NAME = '';
+
+    // ===== Responsive stage scaling =====
+    // Scale the 800×480 stage to fit the viewport (contain), so the whole
+    // composition stays proportional on phone / tablet / desktop.
+    const STAGE_W = 800;
+    const STAGE_H = 480;
+    function fitStage() {
+      const scale = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+      document.documentElement.style.setProperty('--stage-scale', scale);
+    }
+    fitStage();
+    window.addEventListener('resize', fitStage);
 
     const DEFAULT_DISPLAY_MS = 30_000;
     const REPLY_DISPLAY_MS = 10_000;
