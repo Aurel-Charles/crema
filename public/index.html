@@ -35,6 +35,16 @@
       flex-direction: column;
       width: 100%;
     }
+    /* Liseret arc-en-ciel — signature partagée avec l'écran idle (Display).
+     * Dernier enfant flex → collé tout en bas du panneau (ou du viewport sur
+     * mobile). Clippé par les coins arrondis de la carte en ≥600px. */
+    .app::after {
+      content: "";
+      flex-shrink: 0;
+      height: 3px;
+      background: var(--crema-rainbow);
+      opacity: 0.9;
+    }
     @media (min-width: 600px) {
       body {
         align-items: center;
@@ -55,9 +65,32 @@
       header { padding-top: 28px; }
       form { padding: 24px 28px 28px; }
     }
-    @media (min-width: 1024px) {
-      .app { max-width: 640px; }
-      header { padding-left: 28px; padding-right: 28px; }
+    /* ===== Desktop ≥900px — deux colonnes : destinataire | composition ===== */
+    @media (min-width: 900px) {
+      .app { max-width: 920px; }
+      header { padding-left: 32px; padding-right: 32px; }
+      form {
+        display: grid;
+        grid-template-columns: minmax(300px, 340px) 1fr;
+        column-gap: 40px;
+        row-gap: 18px;
+        align-content: start;
+        padding: 28px 32px 32px;
+      }
+      /* Colonne 1 — le hero destinataire, collé en haut */
+      .envoi-field {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: start;
+        position: sticky;
+        top: 28px;
+      }
+      .envoi-hero { padding-top: 4px; }
+      /* Colonne 2 — message, options, disponible, status, envoi */
+      form > .field:not(.envoi-field),
+      form > .status,
+      form > .send-btn { grid-column: 2; }
+      .send-btn { margin-top: 4px; }  /* pas de push auto en grille */
     }
 
     header {
@@ -211,47 +244,86 @@
     select:disabled, textarea:disabled { opacity: 0.5; }
     select[hidden] { display: none; }
 
-    /* ===== Peer picker (segmented, 1–4 peers) =====
-     * Initial in mono echoes the A→F direction marker in /history. */
+    /* ===== Peer picker — liste dépliable (déclenchée par "changer de
+     * destinataire"). Repliée par défaut ; initiale en mono = écho du
+     * marqueur de direction A→F dans /history. */
     .peer-picker {
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
     }
     .peer-picker[hidden] { display: none; }
     .peer-btn {
-      flex: 1;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 14px 8px;
-      min-height: 72px;
+      gap: 12px;
+      padding: 11px 14px;
       background: var(--crema-surface);
       border: 1px solid var(--crema-stroke);
-      border-radius: 14px;
+      border-radius: 12px;
       color: var(--crema-text);
       font-family: inherit;
       cursor: pointer;
+      text-align: left;
       transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
     .peer-btn .initial {
+      flex-shrink: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--crema-stroke-faint);
+      color: var(--crema-accent-deep);
       font-family: var(--crema-font-mono);
-      font-size: 22px;
+      font-size: 13px;
       font-weight: 700;
       line-height: 1;
     }
     .peer-btn .owner {
-      font-size: 13px;
+      font-size: 15px;
+      color: var(--crema-text);
+    }
+    .peer-btn.active { border-color: var(--crema-accent); }
+    .peer-btn.active .initial { background: var(--crema-accent); color: var(--crema-accent-ink); }
+    .peer-btn.active .owner { color: var(--crema-accent-deep); font-weight: 600; }
+    .peer-btn:active { transform: scale(0.99); }
+
+    /* Bouton "changer de destinataire" — petit pill mono à droite du hero */
+    .envoi-changer {
+      flex-shrink: 0;
+      margin-bottom: 16px;
+      max-width: 130px;
+      padding: 8px 12px;
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
+      font-size: 9.5px;
+      letter-spacing: 0.16em;
+      line-height: 1.35;
+      text-transform: uppercase;
+      text-align: left;
       color: var(--crema-muted);
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
     }
-    .peer-btn.active {
-      background: var(--crema-accent);
+    .envoi-changer[hidden] { display: none; }
+    .envoi-changer .caret {
+      display: inline-block;
+      margin-left: 4px;
+      transition: transform 0.2s;
+    }
+    .envoi-changer.open {
       border-color: var(--crema-accent);
-      color: var(--crema-accent-ink);
+      color: var(--crema-accent-deep);
     }
-    .peer-btn.active .owner { color: var(--crema-accent-ink); }
-    .peer-btn:active { transform: scale(0.97); }
+    .envoi-changer.open .caret { transform: rotate(180deg); }
 
     /* Chips (response options) */
     .chips {
@@ -388,6 +460,8 @@
     .envoi-target {
       display: flex;
       align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
     }
     .envoi-name {
       font-family: var(--crema-font-serif);
@@ -520,11 +594,13 @@
         <div class="envoi-label">↓ tu envoies à</div>
         <div class="envoi-target">
           <span class="envoi-name" id="envoi-name">…</span>
+          <button type="button" class="envoi-changer" id="envoi-changer" hidden
+                  aria-expanded="false">changer de destinataire<span class="caret" aria-hidden="true">▾</span></button>
         </div>
         <div class="envoi-meta" id="envoi-meta"></div>
       </div>
       <div class="peer-picker" id="peer-picker" hidden></div>
-      <select id="target" required aria-label="Destinataire">
+      <select id="target" required aria-label="Destinataire" hidden>
         <option value="">Recherche…</option>
       </select>
     </div>
@@ -601,6 +677,7 @@
     const meLabel = document.getElementById('me-label');
     const targetSel = document.getElementById('target');
     const peerPicker = document.getElementById('peer-picker');
+    const envoiChanger = document.getElementById('envoi-changer');
     const textEl = document.getElementById('text');
     const charCount = document.getElementById('char-count');
     const sendBtn = document.getElementById('send');
@@ -830,18 +907,29 @@
       envoiMeta.textContent = 'maintenant';
     }
 
+    // Replier / déplier la liste des destinataires.
+    function setPicker(open) {
+      peerPicker.hidden = !open;
+      envoiChanger.classList.toggle('open', open);
+      envoiChanger.setAttribute('aria-expanded', String(open));
+    }
+
+    envoiChanger.addEventListener('click', () => setPicker(peerPicker.hidden));
+
     peerPicker.addEventListener('click', (e) => {
       const btn = e.target.closest('.peer-btn');
       if (!btn) return;
       const id = btn.dataset.instanceId;
-      if (!id || id === targetSel.value) return;
-      targetSel.value = id;
-      renderPeerPicker();
-      renderHero();
-      // The submit + typing paths already read targetSel.value, so keeping
-      // the <select> as source of truth means we don't need to retrofit them.
+      if (id) {
+        targetSel.value = id;
+        renderPeerPicker();
+        renderHero();
+        // The submit + typing paths already read targetSel.value, so keeping
+        // the <select> as source of truth means we don't need to retrofit them.
+      }
+      setPicker(false);  // toujours replier après un choix
     });
-    // Select fallback (5+ peers) — keep the hero in sync when changed
+    // Select fallback — keep the hero in sync when changed
     targetSel.addEventListener('change', renderHero);
 
     async function loadPeers() {
@@ -850,17 +938,19 @@
         peers = await r.json();
         const prev = targetSel.value;
 
+        // Le <select> reste la source de vérité (toujours masqué). L'UI
+        // visible = hero Mega Type + bouton "changer" + liste dépliable.
+        targetSel.hidden = true;
+
         if (peers.length === 0) {
           targetSel.innerHTML = '<option value="">Aucun destinataire</option>';
-          targetSel.hidden = false;
-          peerPicker.hidden = true;
           peerPicker.innerHTML = '';
+          envoiChanger.hidden = true;
+          setPicker(false);
           sendBtn.disabled = true;
           return;
         }
 
-        // Repopulate <select> regardless — it stays the source of truth
-        // for value / form submission, even when hidden.
         targetSel.innerHTML = peers
           .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(p.owner)}</option>`)
           .join('');
@@ -868,22 +958,16 @@
           ? prev
           : peers[0].instanceId;
 
-        if (peers.length <= SEGMENTED_MAX) {
-          peerPicker.hidden = false;
-          targetSel.hidden = true;
-          renderPeerPicker();
-        } else {
-          peerPicker.hidden = true;
-          peerPicker.innerHTML = '';
-          targetSel.hidden = false;
-        }
+        renderPeerPicker();           // contenu prêt, repli inchangé
+        envoiChanger.hidden = false;  // visible dès qu'il y a un destinataire
         sendBtn.disabled = false;
       } catch {
         peers = [];
+        targetSel.hidden = true;
         targetSel.innerHTML = '<option value="">Erreur réseau</option>';
-        targetSel.hidden = false;
-        peerPicker.hidden = true;
         peerPicker.innerHTML = '';
+        envoiChanger.hidden = true;
+        setPicker(false);
         sendBtn.disabled = true;
       } finally {
         renderHero();
