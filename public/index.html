@@ -452,17 +452,8 @@
       color: var(--crema-accent-deep);
       text-transform: lowercase;
       margin: 2px 0 0;
-      padding-bottom: 0.1em;  /* room for italic descenders above "maintenant" */
+      padding-bottom: 0.1em;  /* room for the italic descenders */
     }
-    .envoi-meta {
-      font-family: var(--crema-font-mono);
-      font-weight: 600;
-      font-size: 10px;
-      color: var(--crema-muted);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-    }
-
     .custom-row {
       display: flex;
       align-items: center;
@@ -565,10 +556,13 @@
         align-content: start;
         padding: 28px 48px 44px;
       }
-      /* Colonne 1 — le hero destinataire, collé en haut */
+      /* Colonne 1 — le hero destinataire, collé en haut. Span sur toutes les
+       * rangées : la colonne occupe toute la hauteur, donc déplier la liste
+       * des Pi remplit l'espace vide sous le hero SANS pousser les rangées de
+       * la colonne 2 (message, options, envoi). */
       .envoi-field {
         grid-column: 1;
-        grid-row: 1;
+        grid-row: 1 / span 50;
         align-self: start;
         position: sticky;
         top: 28px;
@@ -630,7 +624,6 @@
           <button type="button" class="envoi-changer" id="envoi-changer" hidden
                   aria-expanded="false">changer de destinataire<span class="caret" aria-hidden="true">▾</span></button>
         </div>
-        <div class="envoi-meta" id="envoi-meta"></div>
       </div>
       <div class="peer-picker" id="peer-picker" hidden></div>
       <select id="target" required aria-label="Destinataire" hidden>
@@ -722,7 +715,6 @@
     const customRow = document.getElementById('custom-row');
     const customMins = document.getElementById('custom-mins');
     const envoiName = document.getElementById('envoi-name');
-    const envoiMeta = document.getElementById('envoi-meta');
 
     // ===== State =====
     let options = [];                 // string[]
@@ -983,14 +975,11 @@
       if (peers.length === 0) {
         envoiName.textContent = '…';
         envoiName.style.fontSize = '';
-        envoiMeta.textContent = '';
         return;
       }
       const current = peers.find((p) => p.instanceId === targetSel.value) || peers[0];
       envoiName.textContent = displayName(current).toLowerCase();
       fitHeroName();
-      // "depuis aurel" vit déjà dans le header → le meta ne porte que l'instant.
-      envoiMeta.textContent = 'maintenant';
     }
 
     // Re-fit when the viewport changes (row↔column breakpoint, rotation) and
