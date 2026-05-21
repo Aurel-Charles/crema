@@ -541,39 +541,29 @@
     /* ===== Responsive — placé EN FIN de feuille pour gagner en ordre de
      * cascade sur les règles de base (form/header) de même spécificité. ===== */
 
-    /* Tablette / desktop ≥600px : le PWA devient un panneau crème centré. */
+    /* Tablette / desktop ≥600px : plein écran (pas de carte). Le PWA remplit la
+     * fenêtre — le dégradé chaud du body sert de fond, le liseré arc-en-ciel
+     * (.app::after) reste sur le bord gauche. On élargit juste les marges. */
     @media (min-width: 600px) {
-      body {
-        align-items: center;
-        justify-content: center;
-        padding: max(env(safe-area-inset-top), 32px) 24px 32px;
-      }
-      .app {
-        flex: 0 1 auto;
-        max-width: 600px;
-        margin: auto;
-        background: var(--crema-bg);
-        border: 1px solid var(--crema-stroke);
-        border-radius: 28px;
-        box-shadow: 0 30px 90px -45px rgba(196, 101, 156, 0.5),
-                    0 2px 8px -4px rgba(42, 26, 68, 0.12);
-        overflow: hidden;
-      }
-      header { padding: 28px 28px 0; }
-      form { padding: 24px 28px 28px; }
+      header { padding: 28px 40px 0; }
+      form { padding: 28px 40px 40px; }
     }
 
-    /* Desktop ≥900px : deux colonnes — destinataire (sticky) | composition. */
+    /* Desktop ≥900px : deux colonnes — destinataire (sticky) | composition.
+     * Pleine largeur de fenêtre (pas de plafond). */
     @media (min-width: 900px) {
-      .app { max-width: 920px; }
-      header { padding: 28px 36px 0; }
+      header { padding: 28px 48px 0; }
       form {
         display: grid;
-        grid-template-columns: minmax(280px, 320px) 1fr;
-        column-gap: 44px;
+        /* Col 1 (hero destinataire) absorbe la largeur excédentaire — le nom
+         * géant grandit avec la fenêtre (Mega Type). Col 2 (composition) est
+         * plafonnée pour que le textarea reste confortable, donc aucune marge
+         * morte à droite sur grand écran. */
+        grid-template-columns: minmax(300px, 1fr) minmax(380px, 760px);
+        column-gap: 48px;
         row-gap: 18px;
         align-content: start;
-        padding: 28px 36px 36px;
+        padding: 28px 48px 44px;
       }
       /* Colonne 1 — le hero destinataire, collé en haut */
       .envoi-field {
