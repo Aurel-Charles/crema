@@ -438,14 +438,21 @@
       gap: 12px;
     }
     .envoi-name {
+      /* flex-item so a long nickname wraps inside the available width instead
+       * of pushing the "changer" pill off-screen. font-size is set by JS
+       * (sizeHeroName) based on length; this is the short-name default. */
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-wrap: anywhere;
       font-family: var(--crema-font-serif);
       font-style: italic;
-      font-size: clamp(64px, 22vw, 110px);
-      line-height: 0.9;
+      font-size: clamp(56px, 20vw, 110px);
+      line-height: 0.92;
       letter-spacing: -0.04em;
       color: var(--crema-accent-deep);
       text-transform: lowercase;
       margin: 2px 0 0;
+      padding-bottom: 0.1em;  /* room for italic descenders above "maintenant" */
     }
     .envoi-meta {
       font-family: var(--crema-font-mono);
@@ -939,15 +946,30 @@
       }).join('');
     }
 
+    // Scale the hero name down as it gets longer, so a 30-char nickname stays
+    // inside the panel (the 110px default is sized for short owners like "flo").
+    function sizeHeroName(name) {
+      const len = name.length;
+      let fs;
+      if (len <= 7) fs = 'clamp(56px, 20vw, 110px)';
+      else if (len <= 12) fs = 'clamp(44px, 15vw, 80px)';
+      else if (len <= 20) fs = 'clamp(32px, 11vw, 56px)';
+      else fs = 'clamp(24px, 8vw, 40px)';
+      envoiName.style.fontSize = fs;
+    }
+
     // "tu envoies à {peer}" hero — mirror of the picker's selection
     function renderHero() {
       if (peers.length === 0) {
         envoiName.textContent = '…';
+        envoiName.style.fontSize = '';
         envoiMeta.textContent = '';
         return;
       }
       const current = peers.find((p) => p.instanceId === targetSel.value) || peers[0];
-      envoiName.textContent = displayName(current).toLowerCase();
+      const name = displayName(current).toLowerCase();
+      envoiName.textContent = name;
+      sizeHeroName(name);
       // "depuis aurel" vit déjà dans le header → le meta ne porte que l'instant.
       envoiMeta.textContent = 'maintenant';
     }
