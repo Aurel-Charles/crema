@@ -1405,6 +1405,10 @@
         { owner: 'aurel', nickname: '' },
       ]);
     };
+    // ...or just open /display.html?preview-picker on any browser.
+    if (location.search.includes('preview-picker')) {
+      setTimeout(() => window.__previewPicker(), 600);
+    }
 
     shortcutsBar.addEventListener('click', (e) => {
       const btn = e.target.closest('.shortcut-btn');
