@@ -90,7 +90,10 @@
       background: var(--crema-surface);
       border: 1px solid var(--crema-stroke-faint);
       border-radius: 14px;
-      padding: 12px 14px;
+      /* padding-left = 26px : laisse la gouttière du point arc-en-ciel
+       * (.msg-card::before dans theme.css). Sans ça, le raccourci écrase le
+       * padding-left de theme.css et le point chevauche le texte. */
+      padding: 12px 14px 12px 26px;
       display: flex;
       flex-direction: column;
       gap: 6px;
