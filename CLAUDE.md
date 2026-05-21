@@ -4,13 +4,21 @@ Système de messagerie local entre deux Raspberry Pi (4B + 3B+) équipés à ter
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
-## Étape actuelle : ~V6.2 (P2P complet, en fonctionnement)
+## Étape actuelle : V7.1 (surnom d'affichage propagé, en fonctionnement)
 
-La roadmap V0→V6 est livrée et tourne sur les deux Pi. Crema est aujourd'hui un
+La roadmap V0→V6 est livrée et tourne sur les deux Pi, plus le **transport dual**
+(V7.0) et le **surnom d'affichage** (V7.1). Crema est aujourd'hui un
 **système pair-à-pair symétrique complet** : code identique sur chaque Pi,
 découverte mDNS automatique, messages/réponses/raccourcis/TTL, historique
 SQLite, accusés "vu" (V6.1) et indicateur de frappe (V6.2). **Aucun serveur
 central** — le "serveur" du projet = le process Node qui tourne sur chaque Pi.
+
+**Surnom (V7.1)** : chaque Pi a un `nickname` optionnel éditable depuis
+`/settings` (défaut vide), nom effectif affiché = `nickname || owner`. C'est une
+**couche présentation propagée** sur les 3 transports (TXT mDNS, broker
+`register`/`profile:update`, `/me`) ; `owner` reste l'**identité de routage
+immuable**. Stocké dans `data/identity.json` (`store.js`). Maj à chaud sans
+reboot via `transport.announceProfile()`. Voir mémoire `v7-1-display-nickname`.
 
 **Architecture en place** :
 - **Découverte** : `peers.js` — chaque Pi s'annonce et browse le service mDNS
@@ -120,7 +128,7 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 
 - **Backend** : Node.js 20 + Express + Socket.IO
 - **Frontend** : HTML/CSS/JS vanilla (pas de framework au V0 ; possibilité de migrer vers React/Vue plus tard si pertinent)
-- **Persistence** : SQLite (`db.js`) pour l'historique ; JSON (`store.js`) pour réponses/raccourcis/DND
+- **Persistence** : SQLite (`db.js`) pour l'historique ; JSON (`store.js`) pour réponses/raccourcis/DND/surnom (`data/identity.json`)
 - **Découverte réseau** : en mode `p2p`, mDNS via le paquet `mdns` (PAS `bonjour-service` — abandonné, voir mémoire `mdns-on-raspberry-pi` pour les patches libavahi/resolverSequence obligatoires sur Pi). En mode `broker`, pas de mDNS : annuaire centralisé côté relais.
 - **Transport broker** : `socket.io` (relais) + `socket.io-client` (Pi)
 
@@ -133,10 +141,12 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - ✅ **V4** — Options de réponse personnalisées à l'envoi + TTL avec smart defaults + mini barre de progression d'expiration
 - ✅ **V5** — Raccourcis d'envoi sur l'écran tactile, créés/édités depuis la PWA
 - ✅ **V6** — Historique conversations (SQLite), accusés "vu" (V6.1), indicateur de frappe (V6.2)
+- ✅ **V7.0** — Transport broker LAN puis **transport `dual`** (broker primaire + p2p secours, par défaut ; voir « Transport : trois modes »)
+- ✅ **V7.1** — Surnom d'affichage éditable, propagé sur les 3 transports (voir « Étape actuelle »)
 
 Roadmap initiale livrée. Extension livrée : **transport broker LAN** puis
 **transport `dual`** (broker primaire + p2p secours, par défaut ; voir
-« Transport : trois modes »).
+« Transport : trois modes ») puis **surnom d'affichage** (V7.1).
 Pistes encore ouvertes : accès hors domicile, multi-Pi par personne (labels de
 pièce). Chaque version est restée indépendamment utile.
 
