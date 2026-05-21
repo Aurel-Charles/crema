@@ -8,6 +8,11 @@ import { Server } from 'socket.io';
 
 const PORT = Number(process.env.BROKER_PORT ?? 4000);
 const TOKEN = process.env.CREMA_BROKER_TOKEN ?? null;
+// Advertise over mDNS so Pis in dual mode auto-discover us (`_crema-broker._tcp`,
+// matching BROKER_SERVICE_TYPE in the main config). Best-effort: `mdns` is an
+// optional native dep, so a box without it (or a Mac where it won't build) just
+// logs and keeps relaying — pin CREMA_BROKER_URL on the Pis in that case.
+const ADVERTISE = process.env.CREMA_BROKER_ADVERTISE !== '0';
 
 const ts = () => new Date().toISOString();
 const log = (msg) => console.log(`[${ts()}] ${msg}`);
@@ -110,12 +115,34 @@ io.on('connection', (socket) => {
   });
 });
 
+let advertisement = null;
+
+async function startAdvertising() {
+  if (!ADVERTISE) {
+    log('mDNS advertise OFF (CREMA_BROKER_ADVERTISE=0) — pin CREMA_BROKER_URL on the Pis');
+    return;
+  }
+  try {
+    const mdns = (await import('mdns')).default;
+    advertisement = mdns.createAdvertisement(mdns.tcp('crema-broker'), PORT, {
+      name: `crema-broker-${PORT}`,
+    });
+    advertisement.on('error', (err) => log(`mDNS advertise error: ${err.message}`));
+    advertisement.start();
+    log(`mDNS advertising _crema-broker._tcp on :${PORT}`);
+  } catch (err) {
+    log(`mDNS unavailable — auto-discovery off, relay still works (${err.message})`);
+  }
+}
+
 httpServer.listen(PORT, () => {
   log(`Crema broker on :${PORT}${TOKEN ? ' (token auth ON)' : ''}`);
+  startAdvertising();
 });
 
 function shutdown() {
   log('Arrêt du broker…');
+  try { advertisement?.stop(); } catch { /* not advertising */ }
   io.close();
   httpServer.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 2000).unref();

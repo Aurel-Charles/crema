@@ -259,6 +259,11 @@
     </section>
 
     <section>
+      <h2>Connexion</h2>
+      <p class="hint" id="transport-line">…</p>
+    </section>
+
+    <section>
       <h2>Réponses rapides</h2>
       <p class="hint">Boutons proposés sur le Pi quand tu reçois un message. Max 5.</p>
       <div class="rows" id="replies-rows"></div>
@@ -438,6 +443,27 @@
     const socket = io();
     socket.on('dnd:updated', ({ enabled }) => reflectDnd(enabled));
 
+    // ===== Transport / broker status =====
+    const transportLine = document.getElementById('transport-line');
+    function renderTransport(t) {
+      if (!t || !t.broker) { transportLine.textContent = '—'; return; }
+      const map = {
+        connected: 'Broker connecté · relais central',
+        discovering: 'Recherche du broker… · p2p direct en attendant',
+        down: 'Broker injoignable · repli p2p direct',
+        disabled: 'Mode p2p direct (broker désactivé)',
+      };
+      transportLine.textContent = map[t.broker] ?? t.mode ?? '—';
+    }
+    socket.on('transport:health', renderTransport);
+    async function loadTransport() {
+      try {
+        const r = await fetch('/me');
+        const { transport } = await r.json();
+        renderTransport(transport);
+      } catch {}
+    }
+
     // ===== Load =====
     async function loadPeers() {
       try {
@@ -513,6 +539,7 @@
 
     loadAll();
     loadDnd();
+    loadTransport();
   </script>
 </body>
 </html>

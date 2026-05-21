@@ -212,6 +212,30 @@
       opacity: 0.45;
     }
 
+    /* Transport/server status — vertical watermark at the opposite end of the
+     * rainbow spine from crema·<owner> (top → owner, bottom → status). Lives in
+     * .stage so it survives #screen re-renders and shows in idle + message
+     * modes alike. Empty (hidden) when the broker carries traffic; only speaks
+     * up on fallback or full outage. */
+    .server-status {
+      position: absolute;
+      left: 18px;
+      bottom: 28px;
+      z-index: 41;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      font-family: var(--crema-font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.35em;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease, color 0.5s ease;
+    }
+    .server-status.show { opacity: 0.75; }
+    .server-status.fallback { color: var(--crema-attention); }
+    .server-status.error { color: var(--crema-danger); }
+
     .idle-clock {
       position: absolute;
       left: 64px;
@@ -603,6 +627,8 @@
 
   <main id="screen"></main>
 
+  <div id="server-status" class="server-status"></div>
+
   <footer id="shortcuts-bar"></footer>
   </div>
 
@@ -614,6 +640,7 @@
     const notifEl = document.getElementById('notif');
     const shortcutsBar = document.getElementById('shortcuts-bar');
     const dndBtn = document.getElementById('dnd-btn');
+    const serverStatusEl = document.getElementById('server-status');
     let OWNER_NAME = '';
 
     // ===== Responsive stage scaling =====
@@ -657,6 +684,7 @@
     let replies = [];
     let shortcuts = [];
     const peers = new Map();
+    let brokerState = null; // last transport:health broker state
     let dndEnabled = false;
     const messageQueue = [];
     const typingOwners = new Map(); // owner → auto-clear timeout id
@@ -918,6 +946,25 @@
     function isOwnerOnline(owner) {
       for (const o of peers.values()) if (o === owner) return true;
       return false;
+    }
+
+    // Server/transport status watermark. Silent when the broker carries
+    // traffic; on fallback it names the path, on full outage it warns.
+    //   broker connected      → nothing (nominal)
+    //   broker down + peer up  → "p2p · direct" (fallback working)
+    //   broker down + no peer  → "hors-ligne"  (nothing reachable)
+    function renderServerStatus() {
+      if (!serverStatusEl) return;
+      let text = '', cls = '';
+      if (brokerState === 'connected') {
+        // nominal — stay silent
+      } else if (peers.size > 0) {
+        text = 'p2p · direct'; cls = 'fallback';
+      } else if (brokerState) {
+        text = 'hors-ligne'; cls = 'error';
+      }
+      serverStatusEl.textContent = text;
+      serverStatusEl.className = 'server-status' + (text ? ` show ${cls}` : '');
     }
 
     function renderShortcuts() {
@@ -1195,16 +1242,25 @@
       for (const p of list) peers.set(p.instanceId, p.owner);
       renderPresence();
       renderShortcuts();
+      renderServerStatus();
     });
     socket.on('peer:up', ({ instanceId, owner }) => {
       peers.set(instanceId, owner);
       renderPresence();
       renderShortcuts();
+      renderServerStatus();
     });
     socket.on('peer:down', ({ instanceId }) => {
       peers.delete(instanceId);
       renderPresence();
       renderShortcuts();
+      renderServerStatus();
+    });
+
+    // Transport health drives the server-status watermark (broker up/down).
+    socket.on('transport:health', ({ broker } = {}) => {
+      brokerState = broker ?? null;
+      renderServerStatus();
     });
 
     socket.on('replies:updated', (list) => {

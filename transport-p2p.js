@@ -50,6 +50,9 @@ export function createP2pTransport({ io }) {
     // nothing to wire here. The hook exists to satisfy the interface.
     onDeliver() {},
 
+    // No broker on this path — the status badge stays in "direct" mode.
+    health: () => ({ mode: 'p2p', broker: 'disabled' }),
+
     async deliver(target, kind, payload) {
       const path = KIND_PATH[kind];
       if (!path) return { ok: false, error: 'bad-kind' };
