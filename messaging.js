@@ -1,14 +1,13 @@
 import { randomUUID } from 'crypto';
 import { INSTANCE_ID, OWNER, MAX_LABEL_LENGTH, MAX_REPLIES } from './config.js';
 import { clampTtl, findShortcut } from './store.js';
-import { findPeerByInstanceId, findPeerByOwner, resolveHost } from './peers.js';
 import * as db from './db.js';
 import { msgLog, errLog } from './logger.js';
 
 const trunc = (s, n = 40) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
 // When /send succeeds, the message is kept here until either:
-//   - the peer replies (we get a /inbox hit with replyToMsgId), or
+//   - the peer replies (we get an inbound delivery with replyToMsgId), or
 //   - the TTL elapses (we emit msg:expired to our own display).
 const pendingMessages = new Map(); // msgId -> { text, targetOwner, expiresAt, timer }
 
@@ -28,16 +27,6 @@ function sanitizeResponseOptions(input) {
     if (cleaned.length >= MAX_REPLIES) break;
   }
   return cleaned;
-}
-
-async function postInbox(address, port, payload) {
-  const r = await fetch(`http://${address}:${port}/inbox`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
 function trackPending({ id, text, targetOwner, expiresAt, io }) {
@@ -62,23 +51,119 @@ function resolvePending(id) {
   return entry;
 }
 
-// Shared send pipeline used by /send and /shortcut/send. Generates the msgId
-// + expiresAt, posts to the peer (with one re-resolve retry on failure), and
-// registers the pending message so the expiry timer can fire later.
-async function sendToPeer(peer, { text, ttlMs, responseOptions = null, io }) {
+// ===== Inbound handlers (transport-agnostic) =====
+//
+// These hold all the receive-side logic. They are invoked either by the HTTP
+// routes below (P2P transport: a peer POSTs directly) or by transport.onDeliver
+// (broker transport: the broker pushes over WebSocket). The transport only
+// decides how the bytes arrive — the handling is identical. Each returns
+// { ok: true } or { ok: false, error } so the HTTP routes can map to a status.
+
+function handleIncoming(payload, io) {
+  const text = typeof payload?.text === 'string' ? payload.text.trim() : '';
+  const from = typeof payload?.from === 'string' ? payload.from.trim() : 'Inconnu';
+  const fromInstanceId = typeof payload?.fromInstanceId === 'string' ? payload.fromInstanceId : null;
+  const isReply = payload?.isReply === true;
+  const id = typeof payload?.id === 'string' ? payload.id : null;
+  const expiresAt = typeof payload?.expiresAt === 'string' ? payload.expiresAt : null;
+  const replyToMsgId = typeof payload?.replyToMsgId === 'string' ? payload.replyToMsgId : null;
+  const responseOptions = sanitizeResponseOptions(payload?.responseOptions);
+  if (!text) return { ok: false, error: 'Message vide' };
+
+  // If this is a reply to one of our own pending messages, clear its expiry
+  // timer and grab the original text so we can show context on the display.
+  // Fall back to DB if pending state was lost (e.g. server restart).
+  let replyToText = null;
+  if (isReply && replyToMsgId) {
+    const original = resolvePending(replyToMsgId);
+    if (original) {
+      replyToText = original.text;
+    } else {
+      const stored = db.getMessage(replyToMsgId);
+      if (stored) replyToText = stored.text;
+    }
+    db.setStatus(replyToMsgId, 'replied');
+    io.emit('msg:status', { id: replyToMsgId, status: 'replied' });
+  }
+
+  const opts = responseOptions.length > 0 ? responseOptions : null;
+  const rowId = id ?? randomUUID();
+  db.insertMessage({
+    id: rowId,
+    direction: 'in',
+    text,
+    from,
+    to: OWNER,
+    expiresAt: expiresAt ? Date.parse(expiresAt) : null,
+    isReply,
+    replyToMsgId,
+    replyToText,
+    responseOptions: opts,
+    status: 'received',
+  });
+  io.emit('history:new');
+  msgLog(
+    isReply ? 'msg:reply-received' : 'msg:received',
+    `${isReply ? '↩ ' : ''}← ${from} : ${trunc(text)}`,
+    { id: rowId, from, isReply }
+  );
+
+  io.emit('message', {
+    id,
+    text,
+    from,
+    fromInstanceId,
+    isReply,
+    expiresAt,
+    replyToText,
+    responseOptions: opts,
+  });
+  return { ok: true };
+}
+
+function handleReadReceipt(payload, io) {
+  const id = typeof payload?.id === 'string' ? payload.id : '';
+  if (!id) return { ok: false, error: 'id manquant' };
+  // Only if still 'pending' — don't overwrite 'replied' or 'expired'.
+  db.setStatusIfPending(id, 'read');
+  io.emit('msg:status', { id, status: 'read' });
+  return { ok: true };
+}
+
+function handleTypingInbound(payload, io) {
+  const from = typeof payload?.from === 'string' ? payload.from.trim() : '';
+  const state = payload?.state;
+  if (!from || (state !== 'start' && state !== 'stop')) {
+    return { ok: false, error: 'bad payload' };
+  }
+  io.emit('typing', { from, state });
+  return { ok: true };
+}
+
+function dispatchInbound(kind, payload, io) {
+  if (kind === 'inbox') return handleIncoming(payload, io);
+  if (kind === 'read-receipt') return handleReadReceipt(payload, io);
+  if (kind === 'typing') return handleTypingInbound(payload, io);
+  return { ok: false, error: 'bad-kind' };
+}
+
+// ===== Outbound pipeline =====
+
+// Shared send pipeline used by /send and /shortcut/send. Generates the msgId +
+// expiresAt, hands the payload to the transport (which owns reachability and
+// any retry), then registers the pending message so the expiry timer can fire.
+async function sendToPeer(peer, { text, ttlMs, responseOptions = null, io, transport }) {
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + ttlMs).toISOString();
   const opts = responseOptions && responseOptions.length > 0 ? responseOptions : null;
   const payload = { id, text, from: OWNER, fromInstanceId: INSTANCE_ID, expiresAt, responseOptions: opts };
 
-  try {
-    await postInbox(peer.address, peer.port, payload);
-  } catch (err1) {
-    msgLog('msg:send-retry', `Renvoi → ${peer.owner} (${err1.message})`, { to: peer.owner }, 'warn');
-    const fresh = await resolveHost(peer.host);
-    peer.address = fresh;
-    await postInbox(fresh, peer.port, payload);
-  }
+  const result = await transport.deliver(
+    { owner: peer.owner, instanceId: peer.instanceId },
+    'inbox',
+    payload,
+  );
+  if (!result.ok) throw new Error(result.error || 'undeliverable');
 
   const expiresAtMs = Date.parse(expiresAt);
   trackPending({ id, text, targetOwner: peer.owner, expiresAt: expiresAtMs, io });
@@ -97,14 +182,18 @@ async function sendToPeer(peer, { text, ttlMs, responseOptions = null, io }) {
   return { id, expiresAt };
 }
 
-export function init({ app, io }) {
+export function init({ app, io, transport }) {
+  // Receive-side hook for transports that push (broker). No-op for P2P, where
+  // inbound arrives through the HTTP routes below.
+  transport.onDeliver((from, kind, payload) => dispatchInbound(kind, payload, io));
+
   app.post('/send', async (req, res) => {
     const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
     const target = typeof req.body?.target === 'string' ? req.body.target : '';
     if (!text) return res.status(400).json({ error: 'Message vide' });
     if (!target) return res.status(400).json({ error: 'Destinataire manquant' });
 
-    const peer = findPeerByInstanceId(target);
+    const peer = transport.findPeer({ instanceId: target });
     if (!peer) return res.status(404).json({ error: 'Destinataire introuvable' });
 
     const responseOptions = sanitizeResponseOptions(req.body?.responseOptions);
@@ -112,7 +201,7 @@ export function init({ app, io }) {
     const ttlMs = clampTtl(req.body?.ttlMs) ?? defaultTtl;
 
     try {
-      const result = await sendToPeer(peer, { text, ttlMs, responseOptions, io });
+      const result = await sendToPeer(peer, { text, ttlMs, responseOptions, io, transport });
       return res.json({ ok: true, ...result });
     } catch (err) {
       errLog('msg:send-failed', `Envoi → ${peer.owner} échoué : ${err.message}`, { to: peer.owner });
@@ -126,11 +215,11 @@ export function init({ app, io }) {
     const shortcut = findShortcut(id);
     if (!shortcut) return res.status(404).json({ error: 'Raccourci introuvable' });
 
-    const peer = findPeerByOwner(shortcut.targetOwner);
+    const peer = transport.findPeer({ owner: shortcut.targetOwner });
     if (!peer) return res.status(404).json({ error: `${shortcut.targetOwner} hors ligne` });
 
     try {
-      const result = await sendToPeer(peer, { text: shortcut.text, ttlMs: shortcut.ttlMs, io });
+      const result = await sendToPeer(peer, { text: shortcut.text, ttlMs: shortcut.ttlMs, io, transport });
       return res.json({ ok: true, ...result });
     } catch (err) {
       errLog('msg:shortcut-failed', `Raccourci → ${peer.owner} échoué : ${err.message}`, { to: peer.owner });
@@ -145,7 +234,7 @@ export function init({ app, io }) {
     if (!to) return res.status(400).json({ error: 'Destinataire manquant' });
     if (!label) return res.status(400).json({ error: 'Réponse vide' });
 
-    const peer = findPeerByInstanceId(to);
+    const peer = transport.findPeer({ instanceId: to });
     if (!peer) return res.status(404).json({ error: 'Destinataire introuvable' });
 
     const payload = {
@@ -156,168 +245,65 @@ export function init({ app, io }) {
       replyToMsgId,
     };
 
-    let delivered = false;
-    try {
-      await postInbox(peer.address, peer.port, payload);
-      delivered = true;
-    } catch (err1) {
-      msgLog('msg:reply-retry', `Renvoi réponse → ${peer.owner} (${err1.message})`, { to: peer.owner }, 'warn');
-      try {
-        const fresh = await resolveHost(peer.host);
-        peer.address = fresh;
-        await postInbox(fresh, peer.port, payload);
-        delivered = true;
-      } catch (err2) {
-        errLog('msg:reply-failed', `Réponse → ${peer.owner} échouée : ${err2.message}`, { to: peer.owner });
-        return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
-      }
+    const result = await transport.deliver(
+      { owner: peer.owner, instanceId: peer.instanceId },
+      'inbox',
+      payload,
+    );
+    if (!result.ok) {
+      errLog('msg:reply-failed', `Réponse → ${peer.owner} échouée : ${result.error}`, { to: peer.owner });
+      return res.status(502).json({ error: `Destinataire injoignable (${peer.owner})` });
     }
 
-    if (delivered) {
-      const original = replyToMsgId ? db.getMessage(replyToMsgId) : null;
-      db.insertMessage({
-        id: randomUUID(),
-        direction: 'out',
-        text: label,
-        from: OWNER,
-        to: peer.owner,
-        isReply: true,
-        replyToMsgId,
-        replyToText: original?.text ?? null,
-        status: 'sent',
-      });
-      io.emit('history:new');
-      msgLog('msg:reply-sent', `↩ → ${peer.owner} : ${trunc(label)}`, { to: peer.owner, replyToMsgId });
-    }
+    const original = replyToMsgId ? db.getMessage(replyToMsgId) : null;
+    db.insertMessage({
+      id: randomUUID(),
+      direction: 'out',
+      text: label,
+      from: OWNER,
+      to: peer.owner,
+      isReply: true,
+      replyToMsgId,
+      replyToText: original?.text ?? null,
+      status: 'sent',
+    });
+    io.emit('history:new');
+    msgLog('msg:reply-sent', `↩ → ${peer.owner} : ${trunc(label)}`, { to: peer.owner, replyToMsgId });
     return res.json({ ok: true });
   });
 
+  // ===== HTTP inbound routes (P2P transport) =====
+  // A peer POSTs straight to these. They funnel into the shared handlers so the
+  // logic stays identical to the broker's pushed deliveries.
+
   app.post('/inbox', (req, res) => {
-    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
-    const from = typeof req.body?.from === 'string' ? req.body.from.trim() : 'Inconnu';
-    const fromInstanceId = typeof req.body?.fromInstanceId === 'string' ? req.body.fromInstanceId : null;
-    const isReply = req.body?.isReply === true;
-    const id = typeof req.body?.id === 'string' ? req.body.id : null;
-    const expiresAt = typeof req.body?.expiresAt === 'string' ? req.body.expiresAt : null;
-    const replyToMsgId = typeof req.body?.replyToMsgId === 'string' ? req.body.replyToMsgId : null;
-    const responseOptions = sanitizeResponseOptions(req.body?.responseOptions);
-    if (!text) return res.status(400).json({ error: 'Message vide' });
-
-    // If this is a reply to one of our own pending messages, clear its expiry
-    // timer and grab the original text so we can show context on the display.
-    // Fall back to DB if pending state was lost (e.g. server restart).
-    let replyToText = null;
-    if (isReply && replyToMsgId) {
-      const original = resolvePending(replyToMsgId);
-      if (original) {
-        replyToText = original.text;
-      } else {
-        const stored = db.getMessage(replyToMsgId);
-        if (stored) replyToText = stored.text;
-      }
-      db.setStatus(replyToMsgId, 'replied');
-      io.emit('msg:status', { id: replyToMsgId, status: 'replied' });
-    }
-
-    const opts = responseOptions.length > 0 ? responseOptions : null;
-    const rowId = id ?? randomUUID();
-    db.insertMessage({
-      id: rowId,
-      direction: 'in',
-      text,
-      from,
-      to: OWNER,
-      expiresAt: expiresAt ? Date.parse(expiresAt) : null,
-      isReply,
-      replyToMsgId,
-      replyToText,
-      responseOptions: opts,
-      status: 'received',
-    });
-    io.emit('history:new');
-    msgLog(
-      isReply ? 'msg:reply-received' : 'msg:received',
-      `${isReply ? '↩ ' : ''}← ${from} : ${trunc(text)}`,
-      { id: rowId, from, isReply }
-    );
-
-    io.emit('message', {
-      id,
-      text,
-      from,
-      fromInstanceId,
-      isReply,
-      expiresAt,
-      replyToText,
-      responseOptions: opts,
-    });
-    res.json({ ok: true });
+    const r = handleIncoming(req.body, io);
+    return res.status(r.ok ? 200 : 400).json(r.ok ? { ok: true } : { error: r.error });
   });
 
-  // ===== Read receipts (V6.1) =====
-
-  // Incoming: a peer notifies us that one of our outgoing messages was just
-  // displayed on their screen. Mark it 'read' in our DB (only if still
-  // 'pending' — don't overwrite 'replied' or 'expired') and let the PWA
-  // history page update live.
   app.post('/read-receipt', (req, res) => {
-    const id = typeof req.body?.id === 'string' ? req.body.id : '';
-    if (!id) return res.status(400).json({ error: 'id manquant' });
-    db.setStatusIfPending(id, 'read');
-    io.emit('msg:status', { id, status: 'read' });
-    res.json({ ok: true });
+    const r = handleReadReceipt(req.body, io);
+    return res.status(r.ok ? 200 : 400).json(r.ok ? { ok: true } : { error: r.error });
   });
 
-  // Outgoing: our display tells us it just showed a message. Forward the
-  // receipt to the original sender's /read-receipt endpoint. Best-effort —
-  // if the peer is offline or the request fails, we silently drop it.
+  app.post('/typing', (req, res) => {
+    const r = handleTypingInbound(req.body, io);
+    return res.status(r.ok ? 200 : 400).json(r.ok ? { ok: true } : { error: r.error });
+  });
+
+  // ===== Outbound best-effort signals from our own clients =====
   io.on('connection', (socket) => {
+    // Our display tells us it just showed a message → forward a read receipt to
+    // the original sender. Best-effort: drop silently if the peer is gone.
     socket.on('msg:read', async ({ id, fromInstanceId } = {}) => {
       if (!id || !fromInstanceId) return;
-      const peer = findPeerByInstanceId(fromInstanceId);
-      if (!peer) return;
-      try {
-        await fetch(`http://${peer.address}:${peer.port}/read-receipt`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id }),
-          signal: AbortSignal.timeout(5000),
-        });
-      } catch (err) {
-        // Read receipts are best-effort and noisy; log as warn without
-        // an event row so /logs doesn't fill with these.
-        console.warn(`[read-receipt] failed → ${peer.owner}: ${err.message}`);
-      }
+      await transport.deliver({ instanceId: fromInstanceId }, 'read-receipt', { id }).catch(() => {});
     });
 
-    // ===== Typing indicators (V6.2) =====
-    // PWA tells its local server "I'm typing toward X". We forward to X's
-    // /typing endpoint, which lights up the indicator on X's display.
+    // PWA tells us "I'm typing toward X" → forward to X. Best-effort and noisy.
     socket.on('typing', async ({ target, state } = {}) => {
       if (!target || (state !== 'start' && state !== 'stop')) return;
-      const peer = findPeerByInstanceId(target);
-      if (!peer) return;
-      try {
-        await fetch(`http://${peer.address}:${peer.port}/typing`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: OWNER, state }),
-          signal: AbortSignal.timeout(3000),
-        });
-      } catch {
-        // Typing is best-effort and noisy — swallow without logging.
-      }
+      await transport.deliver({ instanceId: target }, 'typing', { from: OWNER, state }).catch(() => {});
     });
-  });
-
-  // Peer notifies us that one of their users is typing toward this Pi.
-  app.post('/typing', (req, res) => {
-    const from = typeof req.body?.from === 'string' ? req.body.from.trim() : '';
-    const state = req.body?.state;
-    if (!from || (state !== 'start' && state !== 'stop')) {
-      return res.status(400).json({ error: 'bad payload' });
-    }
-    io.emit('typing', { from, state });
-    res.json({ ok: true });
   });
 }

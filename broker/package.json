@@ -1,0 +1,17 @@
+{
+  "name": "crema-broker",
+  "version": "0.1.0",
+  "description": "Crema LAN broker — stateless WebSocket relay between Pis",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-protocol.mjs"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
+  }
+}

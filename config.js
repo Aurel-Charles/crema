@@ -15,6 +15,13 @@ export const PORT = Number(process.env.PORT ?? 3000);
 export const OWNER = process.env.CREMA_OWNER ?? deriveOwnerFromHostname();
 export const INSTANCE_ID = randomUUID();
 
+// Transport selection — see docs/broker-protocol.md.
+//   p2p    : mDNS discovery + direct Pi-to-Pi HTTP (default, current behaviour)
+//   broker : Socket.IO client to a LAN broker (not implemented yet)
+export const TRANSPORT = process.env.CREMA_TRANSPORT === 'broker' ? 'broker' : 'p2p';
+export const BROKER_URL = process.env.CREMA_BROKER_URL ?? 'ws://localhost:4000';
+export const BROKER_TOKEN = process.env.CREMA_BROKER_TOKEN ?? null;
+
 export const SERVICE_TYPE = 'crema';
 export const SERVICE_NAME = `crema-${OWNER}-${INSTANCE_ID.slice(0, 8)}`;
 

@@ -5,7 +5,7 @@ import SunCalc from 'suncalc';
 import { join } from 'path';
 
 import { OWNER, INSTANCE_ID, PORT, LAT, LON, PUBLIC_DIR } from './config.js';
-import * as peers from './peers.js';
+import { createTransport } from './transport.js';
 import * as store from './store.js';
 import * as messaging from './messaging.js';
 import * as db from './db.js';
@@ -15,6 +15,10 @@ import { sysLog } from './logger.js';
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
+
+// Topology lives behind the transport seam (p2p | broker). Created early so the
+// routes and connection handler below can read its peer list.
+const transport = createTransport({ io });
 
 app.use(express.json());
 app.use(express.static(PUBLIC_DIR));
@@ -30,7 +34,7 @@ app.get('/me', (req, res) => {
 });
 
 app.get('/peers', (req, res) => {
-  res.json(peers.listPeers());
+  res.json(transport.listPeers());
 });
 
 app.get('/theme-schedule', (req, res) => {
@@ -66,14 +70,14 @@ app.post('/logs/cleanup', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  socket.emit('peers:init', peers.listPeers());
+  socket.emit('peers:init', transport.listPeers());
 });
 
 db.init();
 logger.init({ io });
 await store.init({ app, io });
-messaging.init({ app, io });
-const peerLifecycle = peers.init({ io });
+messaging.init({ app, io, transport });
+transport.init();
 
 httpServer.listen(PORT, () => {
   console.log(`Crema — ${OWNER} on http://localhost:${PORT}`);
@@ -83,7 +87,7 @@ httpServer.listen(PORT, () => {
 function shutdown() {
   console.log('\nArrêt…');
   sysLog('server:stop', 'Crema en cours d\'arrêt');
-  peerLifecycle.stop();
+  transport.stop();
   db.close();
   // 2s grace to let the mDNS "bye" packet reach peers, so they don't keep us
   // in their peerMap until avahi's ~2 min TTL expires. systemd's default
