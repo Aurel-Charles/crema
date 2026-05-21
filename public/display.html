@@ -641,7 +641,19 @@
     const shortcutsBar = document.getElementById('shortcuts-bar');
     const dndBtn = document.getElementById('dnd-btn');
     const serverStatusEl = document.getElementById('server-status');
-    let OWNER_NAME = '';
+    let OWNER_NAME = '';      // this Pi's owner (immutable routing identity)
+    let SELF_NICKNAME = '';   // this Pi's display nickname (V7.1), may be empty
+
+    // Effective display name = nickname || owner, everywhere a name is shown.
+    function selfName() { return SELF_NICKNAME || OWNER_NAME; }
+    function displayName(p) { return (p && (p.nickname || p.owner)) || ''; }
+    // Resolve an owner to its current display name from the live peer map.
+    // Used at *render* time so a renamed peer never rewrites past messages.
+    function resolveOwnerName(owner) {
+      if (owner === OWNER_NAME) return selfName();
+      for (const p of peers.values()) if (p.owner === owner) return p.nickname || p.owner;
+      return owner;
+    }
 
     // ===== Responsive stage scaling =====
     // Scale the 800×480 stage to fit the viewport (contain), so the whole
@@ -723,7 +735,7 @@
       screen.innerHTML = `
         <div class="idle-spine"></div>
         <div class="idle-glow"></div>
-        <div class="idle-watermark">crema · ${escapeHtml(OWNER_NAME.toLowerCase())}</div>
+        <div class="idle-watermark">crema · ${escapeHtml(selfName().toLowerCase())}</div>
         <div class="idle-clock">${timeFmt.format(now)}</div>
         <footer class="idle-footer">
           <div class="idle-stat">
@@ -779,9 +791,12 @@
       if (!currentMsg) return;
       const { text, from, isReply, replyToText } = currentMsg;
 
-      const initial = from ? escapeHtml(from.charAt(0).toUpperCase()) : '';
+      // Resolve the sender's display name from the live peer map (nickname ||
+      // owner). `from` on the wire stays the owner — routing identity intact.
+      const fromName = from ? resolveOwnerName(from) : '';
+      const initial = fromName ? escapeHtml(fromName.charAt(0).toUpperCase()) : '';
       const avatar = initial ? `<div class="avatar">${initial}</div>` : '';
-      const sender = from ? `<div class="msg-sender crema-label">${escapeHtml(from)}</div>` : '';
+      const sender = fromName ? `<div class="msg-sender crema-label">${escapeHtml(fromName)}</div>` : '';
       const ago = `<div class="msg-ago">· ${escapeHtml(formatAgoShort(Date.now() - currentMsg.receivedAt))} ·</div>`;
       const quote = (isReply && replyToText)
         ? `<div class="msg-quote">«&nbsp;${escapeHtml(truncate(replyToText, REPLY_CONTEXT_MAX_CHARS))}&nbsp;»</div>`
@@ -927,16 +942,18 @@
       if (peers.size === 0) { presenceList.innerHTML = ''; return; }
       const seenOwners = new Set();
       const rows = [];
-      for (const owner of peers.values()) {
-        if (seenOwners.has(owner)) continue;
-        seenOwners.add(owner);
-        const statusHtml = typingOwners.has(owner)
+      for (const p of peers.values()) {
+        if (seenOwners.has(p.owner)) continue;
+        seenOwners.add(p.owner);
+        // Typing is keyed by owner (the wire identity); the name shown is the
+        // nickname when set.
+        const statusHtml = typingOwners.has(p.owner)
           ? `écrit<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>`
           : 'en ligne';
         rows.push(`
           <div class="presence">
             <span class="dot"></span>
-            <span><span class="name crema-label">${escapeHtml(owner)}</span> ${statusHtml}</span>
+            <span><span class="name crema-label">${escapeHtml(p.nickname || p.owner)}</span> ${statusHtml}</span>
           </div>
         `);
       }
@@ -944,7 +961,7 @@
     }
 
     function isOwnerOnline(owner) {
-      for (const o of peers.values()) if (o === owner) return true;
+      for (const p of peers.values()) if (p.owner === owner) return true;
       return false;
     }
 
@@ -1069,6 +1086,7 @@
         const data = await r.json();
         if (data.owner) {
           OWNER_NAME = data.owner;
+          SELF_NICKNAME = data.nickname || '';
           if (mode === 'idle') renderIdle();
         }
       } catch {}
@@ -1239,16 +1257,19 @@
 
     socket.on('peers:init', (list) => {
       peers.clear();
-      for (const p of list) peers.set(p.instanceId, p.owner);
+      for (const p of list) peers.set(p.instanceId, { owner: p.owner, nickname: p.nickname || '' });
       renderPresence();
       renderShortcuts();
       renderServerStatus();
     });
-    socket.on('peer:up', ({ instanceId, owner }) => {
-      peers.set(instanceId, owner);
+    socket.on('peer:up', ({ instanceId, owner, nickname }) => {
+      // Upsert — also how a nickname change lands (same instanceId, new name).
+      peers.set(instanceId, { owner, nickname: nickname || '' });
       renderPresence();
       renderShortcuts();
       renderServerStatus();
+      // A message on screen from this sender → refresh its displayed name.
+      if (mode === 'message' && currentMsg && currentMsg.from === owner) renderMessage();
     });
     socket.on('peer:down', ({ instanceId }) => {
       peers.delete(instanceId);
@@ -1261,6 +1282,13 @@
     socket.on('transport:health', ({ broker } = {}) => {
       brokerState = broker ?? null;
       renderServerStatus();
+    });
+
+    // This Pi's own nickname changed (edited from the PWA settings) — refresh
+    // the idle watermark live.
+    socket.on('profile:updated', ({ nickname } = {}) => {
+      SELF_NICKNAME = nickname || '';
+      if (mode === 'idle') renderIdle();
     });
 
     socket.on('replies:updated', (list) => {

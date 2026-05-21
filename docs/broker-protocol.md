@@ -70,8 +70,12 @@ au dual + découverte), `disable-broker.sh` (force p2p), `enable-broker.sh`
 ### 1. `register` — Pi → broker
 Émis dès la connexion. Annonce l'identité du Pi.
 ```js
-emit('register', { owner: "Aurel", instanceId: "<uuid>", token?: "<secret>" })
+emit('register', { owner: "Aurel", instanceId: "<uuid>", nickname?: "Bureau", token?: "<secret>" })
 ```
+`nickname` (V7.1) est le **surnom d'affichage** optionnel — une couche de
+présentation par-dessus `owner`. `owner` reste l'identité de routage immuable :
+le surnom ne sert jamais à router ni à dédupliquer. Vide/absent ⇒ on affiche
+`owner`.
 Le broker enregistre `owner → socket`. Si un `owner` déjà présent se reconnecte
 avec un **nouvel `instanceId`** (Pi redémarré), le broker remplace l'ancien
 socket et émet `peer:down`(ancien) puis `peer:up`(nouveau) — équivalent du
@@ -83,14 +87,14 @@ correspond pas, le broker rejette la connexion (déconnexion immédiate).
 ### 2. `peers` — broker → Pi
 Envoyé juste après un `register` réussi. Liste des pairs connectés (hors soi).
 ```js
-emit('peers', [ { owner: "Flo", instanceId: "<uuid>" } ])
+emit('peers', [ { owner: "Flo", instanceId: "<uuid>", nickname: "Cuisine" } ])
 ```
-Mappe sur l'actuel `peers:init`.
+Mappe sur l'actuel `peers:init`. `nickname` est `""` si non défini.
 
 ### 3. `peer:up` / `peer:down` — broker → Pi
 Diffusés à tous les autres Pi lors d'une (dé)connexion.
 ```js
-emit('peer:up',   { owner, instanceId })
+emit('peer:up',   { owner, instanceId, nickname })
 emit('peer:down', { owner, instanceId })
 ```
 
@@ -115,6 +119,25 @@ Remplace le code HTTP 502.
 - destinataire connecté → `{ ok: true }`
 - destinataire hors ligne → `{ ok: false, error: "offline" }` → l'émetteur
   affiche « Flo hors ligne », comme le 502 actuel.
+
+### 6. `profile:update` — Pi → broker → Pi (V7.1)
+Changement de **surnom d'affichage** à chaud, sans (dé)connexion. C'est
+volontairement **un event distinct, pas un re-`register`** : un re-`register`
+avec le même `owner` déclencherait le *same-owner dedup* du broker sur le Pi
+lui-même (il couperait son propre socket précédent).
+```js
+// Pi → broker (le broker connaît déjà owner/instanceId via socket.data)
+emit('profile:update', { nickname: "Bureau" })
+// broker → tous les autres Pi
+emit('profile:update', { owner, instanceId, nickname })
+```
+Le broker met à jour l'entrée d'annuaire (`registry[owner].nickname`) puis
+rediffuse. Le Pi récepteur fait un *upsert* de présence (réémet un `peer:up`
+local enrichi du nouveau nom — `peer:up` est idempotent côté front-ends).
+
+Côté p2p, l'équivalent est une **recréation de l'advertisement mDNS** (le TXT
+record porte `nickname`) ; le pair voit le nouveau TXT et réémet `peer:up`. En
+`dual`, les deux chemins sont notifiés (`transport.announceProfile()`).
 
 ## Payloads par kind (identiques à l'existant)
 

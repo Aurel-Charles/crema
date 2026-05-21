@@ -45,6 +45,9 @@ export const DATA_DIR = join(__dirname, 'data');
 export const REPLIES_FILE = join(DATA_DIR, 'replies.json');
 export const SHORTCUTS_FILE = join(DATA_DIR, 'shortcuts.json');
 export const DND_FILE = join(DATA_DIR, 'dnd.json');
+// V7.1 — display nickname (and room labels later). owner stays the immutable
+// routing identity; this is a presentation layer propagated on top of it.
+export const IDENTITY_FILE = join(DATA_DIR, 'identity.json');
 export const HISTORY_DB_FILE = join(DATA_DIR, 'history.db');
 export const PUBLIC_DIR = join(__dirname, 'public');
 

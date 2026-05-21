@@ -243,10 +243,25 @@
       font-weight: 700;
       line-height: 1;
     }
+    .peer-names {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+    }
     .peer-btn .owner {
       font-size: 15px;
       color: var(--crema-text);
     }
+    /* Secondary disambiguator — the routing owner, shown only when a nickname
+     * replaces it in the primary line. */
+    .peer-btn .peer-sub {
+      font-family: var(--crema-font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--crema-muted);
+    }
+    .peer-btn.active .peer-sub { color: var(--crema-accent-deep); }
     .peer-btn.active { border-color: var(--crema-accent); }
     .peer-btn.active .initial { background: var(--crema-accent); color: var(--crema-accent-ink); }
     .peer-btn.active .owner { color: var(--crema-accent-deep); font-weight: 600; }
@@ -774,6 +789,10 @@
       }[c]));
     }
 
+    // Effective display name = nickname || owner. owner stays the routing
+    // identity (the <select> value is always instanceId).
+    function displayName(p) { return (p && (p.nickname || p.owner)) || ''; }
+
     function computeTtlMs(preset) {
       if (preset === '30s') return 30_000;
       if (preset === '5min') return 5 * 60_000;
@@ -883,10 +902,11 @@
     async function loadMe() {
       try {
         const r = await fetch('/me');
-        const { owner } = await r.json();
+        const { owner, nickname } = await r.json();
         myOwner = owner ?? '';
-        meLabel.innerHTML = owner
-          ? `<span class="wm-sep">·</span> ${escapeHtml(owner)}`
+        const shown = nickname || owner;
+        meLabel.innerHTML = shown
+          ? `<span class="wm-sep">·</span> ${escapeHtml(shown)}`
           : '';
         renderHero();
       } catch {
@@ -894,16 +914,29 @@
       }
     }
 
+    // This Pi's own nickname changed in /settings → refresh the wordmark.
+    socket.on('profile:updated', ({ owner, nickname }) => {
+      const shown = nickname || owner || myOwner;
+      meLabel.innerHTML = shown ? `<span class="wm-sep">·</span> ${escapeHtml(shown)}` : '';
+    });
+
     function renderPeerPicker() {
       // Highlight the currently selected peer (mirrors targetSel.value).
       const current = targetSel.value;
-      peerPicker.innerHTML = peers.map((p) => `
+      peerPicker.innerHTML = peers.map((p) => {
+        const name = displayName(p);
+        // Secondary = owner, only when a nickname is set (otherwise the name
+        // already *is* the owner → no redundant "aurel · aurel").
+        const sub = (p.nickname && p.nickname.trim())
+          ? `<span class="peer-sub">${escapeHtml(p.owner)}</span>` : '';
+        return `
         <button type="button" class="peer-btn ${p.instanceId === current ? 'active' : ''}"
                 data-instance-id="${escapeHtml(p.instanceId)}">
-          <span class="initial">${escapeHtml(p.owner.charAt(0).toUpperCase())}</span>
-          <span class="owner">${escapeHtml(p.owner)}</span>
+          <span class="initial">${escapeHtml(name.charAt(0).toUpperCase())}</span>
+          <span class="peer-names"><span class="owner">${escapeHtml(name)}</span>${sub}</span>
         </button>
-      `).join('');
+      `;
+      }).join('');
     }
 
     // "tu envoies à {peer}" hero — mirror of the picker's selection
@@ -914,7 +947,7 @@
         return;
       }
       const current = peers.find((p) => p.instanceId === targetSel.value) || peers[0];
-      envoiName.textContent = current.owner.toLowerCase();
+      envoiName.textContent = displayName(current).toLowerCase();
       // "depuis aurel" vit déjà dans le header → le meta ne porte que l'instant.
       envoiMeta.textContent = 'maintenant';
     }
@@ -964,7 +997,7 @@
         }
 
         targetSel.innerHTML = peers
-          .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(p.owner)}</option>`)
+          .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(displayName(p))}</option>`)
           .join('');
         targetSel.value = peers.find((p) => p.instanceId === prev)
           ? prev
