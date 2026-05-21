@@ -960,18 +960,32 @@
     // instead of breaking mid-word. Works in every layout — the element's
     // clientWidth reflects the real space in both the mobile row (flex:1) and
     // the desktop column (width:100%). 110px stays for short owners like "flo".
-    const HERO_MAX_FS = 110, HERO_MIN_FS = 22;
+    const HERO_MAX_FS = 110, HERO_MIN_FS = 20;
     function fitHeroName() {
       const avail = envoiName.clientWidth;
       if (!avail) return;  // not laid out yet
+      // Measure with intra-word breaking OFF: a word wider than `avail` then
+      // overflows and bumps scrollWidth, which is what drives the shrink. With
+      // overflow-wrap:anywhere (the CSS default here) the browser would break
+      // the word to fit, so scrollWidth never exceeds avail and we'd never
+      // shrink. The browser still wraps at spaces, so scrollWidth == widest
+      // line == widest word → the search stays monotonic.
+      const prevWrap = envoiName.style.overflowWrap;
+      const prevBreak = envoiName.style.wordBreak;
+      envoiName.style.overflowWrap = 'normal';
+      envoiName.style.wordBreak = 'normal';
       let lo = HERO_MIN_FS, hi = HERO_MAX_FS, best = HERO_MIN_FS;
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 9; i++) {
         const mid = (lo + hi) / 2;
         envoiName.style.fontSize = mid + 'px';
         if (envoiName.scrollWidth <= avail + 0.5) { best = mid; lo = mid; }
         else hi = mid;
       }
       envoiName.style.fontSize = Math.floor(best) + 'px';
+      // Restore the CSS safety net (breaks a single word longer than avail even
+      // at the min size — pathological, but never overflows the panel).
+      envoiName.style.overflowWrap = prevWrap;
+      envoiName.style.wordBreak = prevBreak;
     }
 
     // "tu envoies à {peer}" hero — mirror of the picker's selection
