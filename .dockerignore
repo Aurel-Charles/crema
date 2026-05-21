@@ -1,0 +1,16 @@
+.git
+.github
+.claude
+.cache
+.npm
+node_modules
+broker/node_modules
+data
+logs
+*.log
+*.tgz
+.env
+.env.*
+README.md
+CLAUDE.md
+docs
