@@ -353,7 +353,7 @@
     function populateTargetSelect(sel, currentValue = '') {
       const owners = new Set(onlineOwners);
       if (currentValue) owners.add(currentValue);
-      const options = ['<option value="">Choisir…</option>'];
+      const options = ['<option value="">🌐 Destinataire courant (global)</option>'];
       for (const o of owners) {
         const offline = !onlineOwners.includes(o);
         options.push(`<option value="${esc(o)}">${esc(o)}${offline ? ' (hors ligne)' : ''}</option>`);
@@ -532,7 +532,7 @@
           targetOwner: card.querySelector('.target-select').value,
           ttlMs: Number(card.querySelector('.ttl-select').value),
         }))
-        .filter((s) => s.label && s.text && s.targetOwner);
+        .filter((s) => s.label && s.text); // empty targetOwner = global shortcut
 
       status.textContent = 'Enregistrement…';
       status.className = 'status';

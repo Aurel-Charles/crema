@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import {
-  DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE, IDENTITY_FILE,
+  DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE, IDENTITY_FILE, DEFAULT_TARGET_FILE,
   MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH, MAX_SHORTCUT_TEXT, MAX_ICON_LENGTH,
   DEFAULT_REPLIES, MIN_TTL_MS, MAX_TTL_MS, OWNER,
 } from './config.js';
@@ -75,7 +75,9 @@ function sanitizeShortcuts(input) {
     const ttlMs = clampTtl(item?.ttlMs);
     if (!label || label.length > MAX_LABEL_LENGTH) continue;
     if (!text || text.length > MAX_SHORTCUT_TEXT) continue;
-    if (!targetOwner || targetOwner.length > MAX_LABEL_LENGTH) continue;
+    // Empty targetOwner is allowed = "global" shortcut, routed to the current
+    // global recipient at send time. A non-empty value pins the shortcut.
+    if (targetOwner.length > MAX_LABEL_LENGTH) continue;
     if (!ttlMs) continue;
     if (icon.length > MAX_ICON_LENGTH) continue;
     const id = (typeof item?.id === 'string' && item.id) ? item.id : randomUUID();
@@ -153,6 +155,34 @@ export function getNickname() {
   return nickname;
 }
 
+// ===== Global recipient (screen) =====
+//
+// The owner that "global" shortcuts are sent to, chosen on the screen. Single
+// target for now (multi-recipient fan-out is a later phase). Empty = not set;
+// global shortcuts then resolve to a sole online peer client-side, or stay
+// disabled when the choice is ambiguous.
+
+let defaultTarget = '';
+
+function sanitizeTarget(input) {
+  const s = typeof input === 'string' ? input.trim() : '';
+  return s.length > MAX_LABEL_LENGTH ? '' : s;
+}
+
+async function loadDefaultTarget() {
+  try {
+    const raw = await readFile(DEFAULT_TARGET_FILE, 'utf8');
+    defaultTarget = sanitizeTarget(JSON.parse(raw)?.target);
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('[default-target] load failed:', err.message);
+    defaultTarget = '';
+  }
+}
+
+export function getDefaultTarget() {
+  return defaultTarget;
+}
+
 // ===== Init =====
 
 export async function init({ app, io, transport }) {
@@ -160,6 +190,7 @@ export async function init({ app, io, transport }) {
   await loadShortcuts();
   await loadDnd();
   await loadIdentity();
+  await loadDefaultTarget();
 
   app.get('/replies', (req, res) => res.json(replies));
   app.put('/replies', async (req, res) => {
@@ -183,6 +214,23 @@ export async function init({ app, io, transport }) {
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  });
+
+  // Global recipient picked on the screen. Front-ends (display ↔ settings)
+  // sync live via the socket event, like dnd/profile.
+  app.get('/default-target', (req, res) => res.json({ target: defaultTarget }));
+  app.put('/default-target', async (req, res) => {
+    const next = sanitizeTarget(req.body?.target);
+    if (next === defaultTarget) return res.json({ target: defaultTarget });
+    defaultTarget = next;
+    try {
+      await persistAtomic(DEFAULT_TARGET_FILE, { target: defaultTarget });
+    } catch (err) {
+      console.error('[default-target] persist failed:', err.message);
+    }
+    io.emit('default-target:updated', { target: defaultTarget });
+    sysLog('default-target', defaultTarget ? `Destinataire courant : ${defaultTarget}` : 'Destinataire courant effacé', { target: defaultTarget });
+    res.json({ target: defaultTarget });
   });
 
   app.get('/dnd', (req, res) => res.json({ enabled: dndEnabled }));

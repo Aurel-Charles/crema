@@ -251,11 +251,12 @@
       transition: color 1.5s ease;
     }
 
-    /* Footer stats row — labels in tracked mono, values in serif. */
+    /* Footer stats row — labels in tracked mono, values in serif. Sits just
+     * under the clock; the recipient bar takes the bottom-left. */
     .idle-footer {
       position: absolute;
       left: 64px;
-      bottom: 28px;
+      top: 332px;
       display: flex;
       align-items: flex-end;
       gap: 22px;
@@ -610,6 +611,149 @@
       border-color: var(--crema-danger);
     }
 
+    /* Global recipient bar — fixed in idle, shows who "global" shortcuts go to. */
+    #dest-bar {
+      position: absolute;
+      left: 64px;
+      bottom: 28px;
+      z-index: 40;
+      display: none;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    #dest-bar.show { display: flex; }
+    #dest-bar .db-line {
+      display: flex;
+      align-items: baseline;
+      gap: 9px;
+      font-size: 20px;
+    }
+    #dest-bar .db-label { color: var(--crema-muted); }
+    #dest-bar .db-name {
+      color: var(--crema-accent);
+      font-weight: 600;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #dest-bar .db-name.none { color: var(--crema-muted); font-weight: 400; font-style: italic; }
+    #dest-bar #dest-change {
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--crema-text);
+      background: rgba(232, 137, 110, 0.08);
+      border: 1.5px solid rgba(232, 137, 110, 0.35);
+      border-radius: 14px;
+      padding: 7px 16px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s, transform 0.05s;
+    }
+    #dest-bar #dest-change:active { transform: scale(0.96); background: rgba(232, 137, 110, 0.22); }
+
+    /* Recipient picker modal (opened by "Changer"). */
+    #target-picker {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 8, 6, 0.78);
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s;
+    }
+    #target-picker.open { opacity: 1; pointer-events: auto; }
+    .tp-card {
+      background: var(--crema-bg);
+      border: 1.5px solid rgba(232, 137, 110, 0.35);
+      border-radius: 24px;
+      padding: 26px 32px 30px;
+      max-width: 600px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+      transform: scale(0.94);
+      transition: transform 0.18s;
+    }
+    #target-picker.open .tp-card { transform: scale(1); }
+    .tp-title {
+      font-size: 22px;
+      color: var(--crema-text);
+      text-align: center;
+    }
+    .tp-tiles {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 22px;
+    }
+    .tp-empty {
+      color: var(--crema-muted);
+      font-size: 15px;
+      margin-top: 18px;
+    }
+    .tp-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 9px;
+      min-width: 130px;
+      padding: 20px 18px;
+      font-family: inherit;
+      color: var(--crema-text);
+      background: rgba(232, 137, 110, 0.08);
+      border: 1.5px solid rgba(232, 137, 110, 0.35);
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tp-tile:active { transform: scale(0.96); background: rgba(232, 137, 110, 0.22); }
+    .tp-tile.selected {
+      border-color: var(--crema-accent);
+      background: rgba(232, 137, 110, 0.22);
+    }
+    .tp-tile .tp-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--crema-presence);
+      box-shadow: 0 0 8px var(--crema-presence);
+    }
+    .tp-tile .tp-name { font-size: 19px; font-weight: 500; }
+    .tp-valider {
+      display: block;
+      margin: 26px auto 0;
+      font-family: inherit;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--crema-bg);
+      background: var(--crema-accent);
+      border: none;
+      border-radius: 16px;
+      padding: 12px 40px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.05s, opacity 0.15s;
+    }
+    .tp-valider:active { transform: scale(0.97); }
+    .tp-valider:disabled { opacity: 0.35; cursor: default; }
+
+    /* Pinned-shortcut destination label, under the button text. */
+    .shortcut-btn .dest {
+      font-size: 10px;
+      color: var(--crema-muted);
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
   </style>
 </head>
 <body class="crema-display night">
@@ -630,6 +774,24 @@
   <div id="server-status" class="server-status"></div>
 
   <footer id="shortcuts-bar"></footer>
+
+  <!-- Global recipient bar (idle only) -->
+  <div id="dest-bar">
+    <div class="db-line">
+      <span class="db-label">Destinataire :</span>
+      <span class="db-name" id="dest-name">—</span>
+    </div>
+    <button id="dest-change" type="button">Changer</button>
+  </div>
+
+  <!-- Recipient picker (opened by "Changer") -->
+  <div id="target-picker">
+    <div class="tp-card">
+      <div class="tp-title">Destinataire ?</div>
+      <div class="tp-tiles" id="tp-tiles"></div>
+      <button class="tp-valider" id="tp-valider" type="button">Valider</button>
+    </div>
+  </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -640,6 +802,12 @@
     const notifEl = document.getElementById('notif');
     const shortcutsBar = document.getElementById('shortcuts-bar');
     const dndBtn = document.getElementById('dnd-btn');
+    const targetPicker = document.getElementById('target-picker');
+    const tpTiles = document.getElementById('tp-tiles');
+    const tpValider = document.getElementById('tp-valider');
+    const destBar = document.getElementById('dest-bar');
+    const destNameEl = document.getElementById('dest-name');
+    const destChangeBtn = document.getElementById('dest-change');
     const serverStatusEl = document.getElementById('server-status');
     let OWNER_NAME = '';      // this Pi's owner (immutable routing identity)
     let SELF_NICKNAME = '';   // this Pi's display nickname (V7.1), may be empty
@@ -695,6 +863,7 @@
     let currentMsg = null;
     let replies = [];
     let shortcuts = [];
+    let currentTarget = '';  // global recipient (owner), persisted server-side
     const peers = new Map();
     let brokerState = null; // last transport:health broker state
     let dndEnabled = false;
@@ -759,11 +928,13 @@
       if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
       renderIdle();
       renderShortcuts();
+      renderDestBar();
       maybeDrainNext();
     }
 
     function showMessage(data) {
       mode = 'message';
+      renderDestBar();  // hides the global recipient bar while a message shows
       // Use arrivedAt if set (message was queued), else stamp now.
       // This keeps the "il y a Xs" subtitle honest for drained messages.
       const receivedAt = data.arrivedAt ?? Date.now();
@@ -965,6 +1136,19 @@
       return false;
     }
 
+    // Distinct online owners (dedup multi-instance same owner), used by the
+    // recipient picker to decide whether a target choice is needed.
+    function onlineOwners() {
+      const seen = new Set();
+      const out = [];
+      for (const p of peers.values()) {
+        if (seen.has(p.owner)) continue;
+        seen.add(p.owner);
+        out.push({ owner: p.owner, nickname: p.nickname || '' });
+      }
+      return out;
+    }
+
     // Server/transport status watermark. Silent when the broker carries
     // traffic; on fallback it names the path, on full outage it warns.
     //   broker connected      → nothing (nominal)
@@ -984,21 +1168,55 @@
       serverStatusEl.className = 'server-status' + (text ? ` show ${cls}` : '');
     }
 
+    // The recipient a shortcut would actually reach: its pinned owner, or the
+    // current global target for global shortcuts. '' = nothing reachable.
+    function shortcutTarget(s) {
+      return s.targetOwner || effectiveTarget();
+    }
+
     function renderShortcuts() {
       if (mode !== 'idle' || shortcuts.length === 0) {
         shortcutsBar.innerHTML = '';
         return;
       }
       shortcutsBar.innerHTML = shortcuts.map((s, i) => {
-        const online = isOwnerOnline(s.targetOwner);
+        const dest = shortcutTarget(s);
+        const online = dest && isOwnerOnline(dest);
         const iconHtml = s.icon ? `<span class="icon">${escapeHtml(s.icon)}</span>` : '';
+        // Pinned shortcuts carry their destination as a label under the text;
+        // global ones follow the recipient bar, so no per-button label.
+        const destHtml = s.targetOwner
+          ? `<span class="dest">→ ${escapeHtml(resolveOwnerName(s.targetOwner))}</span>`
+          : '';
         return `
           <button class="shortcut-btn" data-i="${i}" ${online ? '' : 'disabled'}>
             ${iconHtml}
             <span class="lbl">${escapeHtml(s.label)}</span>
+            ${destHtml}
           </button>
         `;
       }).join('');
+    }
+
+    // Global recipient bar. Effective target = the explicit choice when online,
+    // else a sole online peer (zero-friction 2-Pi case), else none.
+    function effectiveTarget() {
+      if (currentTarget && isOwnerOnline(currentTarget)) return currentTarget;
+      const owners = onlineOwners();
+      return owners.length === 1 ? owners[0].owner : '';
+    }
+
+    function renderDestBar() {
+      if (mode !== 'idle') { destBar.classList.remove('show'); return; }
+      const eff = effectiveTarget();
+      if (eff) {
+        destNameEl.textContent = resolveOwnerName(eff);
+        destNameEl.classList.remove('none');
+      } else {
+        destNameEl.textContent = 'à choisir';
+        destNameEl.classList.add('none');
+      }
+      destBar.classList.add('show');
     }
 
     function showNotif(text) {
@@ -1216,26 +1434,32 @@
         renderShortcuts();
       } catch {}
     }
+    async function loadDefaultTarget() {
+      try {
+        const r = await fetch('/default-target');
+        currentTarget = (await r.json()).target || '';
+      } catch {}
+      renderDestBar();
+      renderShortcuts();
+    }
     loadShortcuts();
+    loadDefaultTarget();
 
-    shortcutsBar.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.shortcut-btn');
-      if (!btn || btn.disabled) return;
-      const i = Number(btn.dataset.i);
-      const s = shortcuts[i];
-      if (!s) return;
-
+    // Perform the send + on-button feedback. targetOwner is optional; omitted,
+    // the server resolves the shortcut's pinned target or the global recipient.
+    async function sendShortcut(s, targetOwner, btn) {
       const allBtns = shortcutsBar.querySelectorAll('.shortcut-btn');
       for (const b of allBtns) b.disabled = true;
 
       const lblEl = btn.querySelector('.lbl');
       const originalLabel = lblEl ? lblEl.textContent : '';
+      const body = targetOwner ? { id: s.id, targetOwner } : { id: s.id };
 
       try {
         const r = await fetch('/shortcut/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: s.id }),
+          body: JSON.stringify(body),
         });
         if (!r.ok) throw new Error();
         btn.classList.add('sent');
@@ -1250,6 +1474,73 @@
           renderShortcuts();
         }, 2000);
       }
+    }
+
+    // ===== Recipient picker — pick the global recipient (single, min 1) =====
+    let pickerSelection = '';
+
+    function openTargetPicker() {
+      const owners = onlineOwners();
+      pickerSelection = owners.some((o) => o.owner === currentTarget) ? currentTarget : '';
+      if (owners.length === 0) {
+        tpTiles.innerHTML = '<div class="tp-empty">Aucun pair en ligne</div>';
+      } else {
+        tpTiles.innerHTML = owners.map((o) => `
+          <button class="tp-tile${o.owner === pickerSelection ? ' selected' : ''}" data-owner="${escapeHtml(o.owner)}">
+            <span class="tp-dot"></span>
+            <span class="tp-name">${escapeHtml(o.nickname || o.owner)}</span>
+          </button>
+        `).join('');
+      }
+      tpValider.disabled = !pickerSelection;
+      targetPicker.classList.add('open');
+    }
+
+    function closeTargetPicker() {
+      targetPicker.classList.remove('open');
+    }
+
+    destChangeBtn.addEventListener('click', openTargetPicker);
+
+    // Tap outside the card dismisses.
+    targetPicker.addEventListener('click', (e) => {
+      if (e.target === targetPicker) closeTargetPicker();
+    });
+
+    tpTiles.addEventListener('click', (e) => {
+      const tile = e.target.closest('.tp-tile');
+      if (!tile) return;
+      pickerSelection = tile.dataset.owner;
+      tpTiles.querySelectorAll('.tp-tile').forEach((t) => t.classList.toggle('selected', t === tile));
+      tpValider.disabled = false;
+    });
+
+    tpValider.addEventListener('click', async () => {
+      if (!pickerSelection) return;
+      const chosen = pickerSelection;
+      try {
+        await fetch('/default-target', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: chosen }),
+        });
+      } catch {}
+      // Optimistic — the socket echo (default-target:updated) confirms.
+      currentTarget = chosen;
+      closeTargetPicker();
+      renderDestBar();
+      renderShortcuts();
+    });
+
+    shortcutsBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('.shortcut-btn');
+      if (!btn || btn.disabled) return;
+      const s = shortcuts[Number(btn.dataset.i)];
+      if (!s) return;
+      // Pinned shortcut → server uses its own target. Global → pass the current
+      // effective recipient as an explicit override.
+      const override = s.targetOwner ? undefined : effectiveTarget();
+      sendShortcut(s, override, btn);
     });
 
     // ===== Socket =====
@@ -1260,6 +1551,7 @@
       for (const p of list) peers.set(p.instanceId, { owner: p.owner, nickname: p.nickname || '' });
       renderPresence();
       renderShortcuts();
+      renderDestBar();
       renderServerStatus();
     });
     socket.on('peer:up', ({ instanceId, owner, nickname }) => {
@@ -1267,6 +1559,7 @@
       peers.set(instanceId, { owner, nickname: nickname || '' });
       renderPresence();
       renderShortcuts();
+      renderDestBar();
       renderServerStatus();
       // A message on screen from this sender → refresh its displayed name.
       if (mode === 'message' && currentMsg && currentMsg.from === owner) renderMessage();
@@ -1275,6 +1568,7 @@
       peers.delete(instanceId);
       renderPresence();
       renderShortcuts();
+      renderDestBar();
       renderServerStatus();
     });
 
@@ -1298,6 +1592,13 @@
 
     socket.on('shortcuts:updated', (list) => {
       shortcuts = list;
+      renderShortcuts();
+    });
+
+    // Global recipient changed (here or from another front-end) — stay in sync.
+    socket.on('default-target:updated', ({ target } = {}) => {
+      currentTarget = target || '';
+      renderDestBar();
       renderShortcuts();
     });
 
