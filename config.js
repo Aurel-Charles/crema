@@ -14,6 +14,7 @@ function deriveOwnerFromHostname() {
 export const PORT = Number(process.env.PORT ?? 3000);
 export const OWNER = process.env.CREMA_OWNER ?? deriveOwnerFromHostname();
 export const INSTANCE_ID = randomUUID();
+export const EMBED_BROKER = process.env.CREMA_EMBED_BROKER === '1';
 
 // Transport selection — see docs/broker-protocol.md.
 //   dual   : broker primary + p2p fallback, both live at once (default)
@@ -27,7 +28,7 @@ export const TRANSPORT = (_t === 'p2p' || _t === 'broker') ? _t : 'dual';
 // pin the primary path and skip discovery entirely — the robust choice.
 // Pure broker mode falls back to localhost for Mac testing.
 export const BROKER_URL = process.env.CREMA_BROKER_URL ?? null;
-export const BROKER_URL_DEFAULT = 'ws://localhost:4000';
+export const BROKER_URL_DEFAULT = 'ws://127.0.0.1:4000';
 export const BROKER_TOKEN = process.env.CREMA_BROKER_TOKEN ?? null;
 
 // mDNS service types: peers announce `_crema._tcp`, the broker announces
