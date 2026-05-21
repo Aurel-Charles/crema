@@ -17,9 +17,12 @@ central** — le "serveur" du projet = le process Node qui tourne sur chaque Pi.
   `crema`, maintient une `peerMap`. Health-check `/me` toutes les 10s (drop
   après 3 échecs) + recréation advertisement/browser toutes les 2h (anti-rust,
   cf. décrochage mDNS observé à ~4h). Voir mémoire `mdns-on-raspberry-pi`.
-- **Transport** : échanges HTTP **directs de Pi à Pi** vers l'IP du pair —
-  `POST /inbox` (messages), `/reply`, `/read-receipt` (V6.1), `/typing` (V6.2).
-  Un retry avec re-résolution `.local` sur premier échec.
+- **Transport** : abstrait derrière un *seam* (`transport.js`) avec deux
+  implémentations interchangeables, choisies par `CREMA_TRANSPORT` (défaut
+  `p2p`). Voir la section « Transport : deux modes » plus bas.
+  - `p2p` : échanges HTTP **directs de Pi à Pi** vers l'IP du pair (`POST /inbox`,
+    `/reply`, `/read-receipt`, `/typing`), retry avec re-résolution `.local`.
+  - `broker` : client Socket.IO vers un relais LAN central.
 - **État** : chaque Pi a **son propre SQLite** (`db.js`), ses pending messages
   avec timers TTL, son historique. Pas de duplication entre Pi.
 - **Idle** : horloge + thème jour/nuit (SunCalc, `/theme-schedule`), présence du
@@ -27,18 +30,43 @@ central** — le "serveur" du projet = le process Node qui tourne sur chaque Pi.
 
 **Fichiers** :
 - `server.js` — Express + Socket.IO, routes pages + API (`/me`, `/peers`, `/theme-schedule`, `/history.json`, `/logs.json`)
-- `config.js` — env/identité (`OWNER`, `INSTANCE_ID`, ports, bornes TTL)
-- `peers.js` — découverte mDNS + health-check + dedup same-owner
-- `messaging.js` — pipeline d'envoi/réponse/inbox/accusés/typing
+- `config.js` — env/identité (`OWNER`, `INSTANCE_ID`, ports, bornes TTL, `CREMA_TRANSPORT`/`CREMA_BROKER_URL`/`CREMA_BROKER_TOKEN`)
+- `transport.js` — sélecteur p2p/broker derrière une interface commune
+- `transport-p2p.js` — transport P2P (enveloppe `peers.js` + HTTP direct)
+- `transport-broker.js` — transport broker (client Socket.IO)
+- `peers.js` — découverte mDNS + health-check + dedup same-owner (détail du transport p2p)
+- `messaging.js` — pipeline d'envoi/réponse + handlers entrants inbox/accusés/typing
 - `store.js` — réponses par défaut, raccourcis, DND (JSON dans `data/`)
 - `db.js` — historique SQLite
 - `logger.js` — logs structurés vers `/logs` + Socket.IO
 - `public/` — `index.html` (PWA), `display.html` (écran), `settings.html`, `history.html`, `logs.html`, `theme.css`
-- `install-pi.sh`, `start.sh`, `start-display.sh` — setup/lancement Pi
+- `broker/` — le relais LAN autonome (`server.js`, `install-broker.sh`, `start-broker.sh`, `test-protocol.mjs`)
+- `install-pi.sh`, `start.sh`, `start-display.sh`, `enable-broker.sh`, `disable-broker.sh` — setup/lancement Pi
 
-**Réflexion en cours** : envisager un *broker WebSocket sur serveur LAN* pour
-supprimer mDNS (sa fragilité reste la principale source de friction). Casserait
-le "no single point of failure" actuel — décision non tranchée.
+## Transport : deux modes (p2p | broker)
+
+Le transport est interchangeable derrière `transport.js`, sélectionné par
+`CREMA_TRANSPORT` (défaut `p2p`). Les deux modes sont **validés en conditions
+réelles** sur les deux Pi ; le même code tourne dans les deux topologies. Spec
+complète : `docs/broker-protocol.md`.
+
+- **`p2p`** (défaut) — découverte mDNS + HTTP direct Pi↔Pi. Pas de serveur
+  central, pas de single point of failure. Fragilité : la stack mDNS/avahi.
+- **`broker`** — chaque Pi est un client Socket.IO d'un **relais LAN central**
+  (`broker/server.js`). Supprime entièrement mDNS ; introduit un SPOF (le
+  broker). Le relais est *stateless* (annuaire `owner→socket` + routage), ne
+  persiste rien — chaque Pi reste seul maître de son historique.
+
+Bascule (réversible, sans toucher `crema.service`) :
+- Activer le broker sur un Pi : `./enable-broker.sh ws://<serveur>:4000 [token]`
+  (pose un drop-in systemd avec les variables d'env).
+- Revenir au p2p : `./disable-broker.sh`.
+- Installer le relais sur le serveur dédié : `broker/install-broker.sh`
+  (service `crema-broker.service`, token optionnel via `CREMA_BROKER_TOKEN`).
+
+Le broker tourne en pur JS (testable sur Mac : `cd broker && npm start`), à la
+différence du chemin p2p qui dépend de `mdns`/`better-sqlite3` (natifs, voir
+mémoire `mdns-build-fails-node24-mac`).
 
 ## Pré-requis matériel/setup
 
@@ -76,7 +104,8 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - **Backend** : Node.js 20 + Express + Socket.IO
 - **Frontend** : HTML/CSS/JS vanilla (pas de framework au V0 ; possibilité de migrer vers React/Vue plus tard si pertinent)
 - **Persistence** : SQLite (`db.js`) pour l'historique ; JSON (`store.js`) pour réponses/raccourcis/DND
-- **Découverte réseau** : mDNS via le paquet `mdns` (PAS `bonjour-service` — abandonné, voir mémoire `mdns-on-raspberry-pi` pour les patches libavahi/resolverSequence obligatoires sur Pi)
+- **Découverte réseau** : en mode `p2p`, mDNS via le paquet `mdns` (PAS `bonjour-service` — abandonné, voir mémoire `mdns-on-raspberry-pi` pour les patches libavahi/resolverSequence obligatoires sur Pi). En mode `broker`, pas de mDNS : annuaire centralisé côté relais.
+- **Transport broker** : `socket.io` (relais) + `socket.io-client` (Pi)
 
 ## Roadmap
 
@@ -88,9 +117,10 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - ✅ **V5** — Raccourcis d'envoi sur l'écran tactile, créés/édités depuis la PWA
 - ✅ **V6** — Historique conversations (SQLite), accusés "vu" (V6.1), indicateur de frappe (V6.2)
 
-Roadmap initiale livrée. Pistes ouvertes : broker LAN (anti-mDNS), accès hors
-domicile, multi-Pi par personne (labels de pièce). Chaque version est restée
-indépendamment utile.
+Roadmap initiale livrée. Extension livrée : **transport broker LAN** en
+alternative au mDNS (`CREMA_TRANSPORT=broker`, voir « Transport : deux modes »).
+Pistes encore ouvertes : accès hors domicile, multi-Pi par personne (labels de
+pièce). Chaque version est restée indépendamment utile.
 
 ## Architecture cible (V1+)
 
