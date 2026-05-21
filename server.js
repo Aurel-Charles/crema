@@ -4,7 +4,7 @@ import { Server } from 'socket.io';
 import SunCalc from 'suncalc';
 import { join } from 'path';
 
-import { OWNER, INSTANCE_ID, PORT, LAT, LON, PUBLIC_DIR } from './config.js';
+import { OWNER, INSTANCE_ID, PORT, LAT, LON, PUBLIC_DIR, EMBED_BROKER } from './config.js';
 import { createTransport } from './transport.js';
 import * as store from './store.js';
 import * as messaging from './messaging.js';
@@ -16,9 +16,16 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 
+let embeddedBroker = null;
+if (EMBED_BROKER) {
+  const { startBroker } = await import('./broker/server.js');
+  embeddedBroker = startBroker();
+  await embeddedBroker.ready;
+}
+
 // Topology lives behind the transport seam (p2p | broker). Created early so the
 // routes and connection handler below can read its peer list.
-const transport = createTransport({ io });
+const transport = await createTransport({ io });
 
 app.use(express.json());
 app.use(express.static(PUBLIC_DIR));
@@ -89,6 +96,7 @@ function shutdown() {
   console.log('\nArrêt…');
   sysLog('server:stop', 'Crema en cours d\'arrêt');
   transport.stop();
+  embeddedBroker?.stop();
   db.close();
   // 2s grace to let the mDNS "bye" packet reach peers, so they don't keep us
   // in their peerMap until avahi's ~2 min TTL expires. systemd's default
