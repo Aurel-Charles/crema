@@ -215,8 +215,13 @@ export function init({ app, io, transport }) {
     const shortcut = findShortcut(id);
     if (!shortcut) return res.status(404).json({ error: 'Raccourci introuvable' });
 
-    const peer = transport.findPeer({ owner: shortcut.targetOwner });
-    if (!peer) return res.status(404).json({ error: `${shortcut.targetOwner} hors ligne` });
+    // Proto A — the screen may override the recipient at tap-time when several
+    // peers are online. The shortcut's targetOwner stays the default.
+    const override = typeof req.body?.targetOwner === 'string' ? req.body.targetOwner.trim() : '';
+    const wantOwner = override || shortcut.targetOwner;
+
+    const peer = transport.findPeer({ owner: wantOwner });
+    if (!peer) return res.status(404).json({ error: `${wantOwner} hors ligne` });
 
     try {
       const result = await sendToPeer(peer, { text: shortcut.text, ttlMs: shortcut.ttlMs, io, transport });

@@ -610,6 +610,84 @@
       border-color: var(--crema-danger);
     }
 
+    /* Proto A — recipient picker. Shown on shortcut tap only when 2+ owners are
+     * online; a single peer keeps the zero-friction direct send. */
+    #target-picker {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 8, 6, 0.78);
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s;
+    }
+    #target-picker.open { opacity: 1; pointer-events: auto; }
+    .tp-card {
+      background: var(--crema-bg);
+      border: 1.5px solid rgba(232, 137, 110, 0.35);
+      border-radius: 24px;
+      padding: 26px 32px 30px;
+      max-width: 600px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+      transform: scale(0.94);
+      transition: transform 0.18s;
+    }
+    #target-picker.open .tp-card { transform: scale(1); }
+    .tp-title {
+      font-size: 22px;
+      color: var(--crema-text);
+      text-align: center;
+    }
+    .tp-sub {
+      font-size: 13px;
+      color: var(--crema-muted);
+      text-align: center;
+      margin: 4px 0 22px;
+    }
+    .tp-tiles {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .tp-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 9px;
+      min-width: 130px;
+      padding: 20px 18px;
+      font-family: inherit;
+      color: var(--crema-text);
+      background: rgba(232, 137, 110, 0.08);
+      border: 1.5px solid rgba(232, 137, 110, 0.35);
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tp-tile:active { transform: scale(0.96); background: rgba(232, 137, 110, 0.22); }
+    .tp-tile.default { border-color: var(--crema-accent); }
+    .tp-tile .tp-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--crema-presence);
+      box-shadow: 0 0 8px var(--crema-presence);
+    }
+    .tp-tile .tp-name { font-size: 19px; font-weight: 500; }
+    .tp-tile .tp-badge {
+      font-size: 10px;
+      color: var(--crema-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
   </style>
 </head>
 <body class="crema-display night">
@@ -630,6 +708,15 @@
   <div id="server-status" class="server-status"></div>
 
   <footer id="shortcuts-bar"></footer>
+
+  <!-- Proto A — recipient picker overlay (filled at open time) -->
+  <div id="target-picker">
+    <div class="tp-card">
+      <div class="tp-title" id="tp-title"></div>
+      <div class="tp-sub">À qui ?</div>
+      <div class="tp-tiles" id="tp-tiles"></div>
+    </div>
+  </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -640,6 +727,9 @@
     const notifEl = document.getElementById('notif');
     const shortcutsBar = document.getElementById('shortcuts-bar');
     const dndBtn = document.getElementById('dnd-btn');
+    const targetPicker = document.getElementById('target-picker');
+    const tpTitle = document.getElementById('tp-title');
+    const tpTiles = document.getElementById('tp-tiles');
     const serverStatusEl = document.getElementById('server-status');
     let OWNER_NAME = '';      // this Pi's owner (immutable routing identity)
     let SELF_NICKNAME = '';   // this Pi's display nickname (V7.1), may be empty
@@ -965,6 +1055,19 @@
       return false;
     }
 
+    // Distinct online owners (dedup multi-instance same owner), used by the
+    // recipient picker to decide whether a target choice is needed.
+    function onlineOwners() {
+      const seen = new Set();
+      const out = [];
+      for (const p of peers.values()) {
+        if (seen.has(p.owner)) continue;
+        seen.add(p.owner);
+        out.push({ owner: p.owner, nickname: p.nickname || '' });
+      }
+      return out;
+    }
+
     // Server/transport status watermark. Silent when the broker carries
     // traffic; on fallback it names the path, on full outage it warns.
     //   broker connected      → nothing (nominal)
@@ -990,7 +1093,9 @@
         return;
       }
       shortcutsBar.innerHTML = shortcuts.map((s, i) => {
-        const online = isOwnerOnline(s.targetOwner);
+        // Tappable as soon as any peer is reachable — the picker handles
+        // redirecting when the default target is offline but others aren't.
+        const online = peers.size > 0;
         const iconHtml = s.icon ? `<span class="icon">${escapeHtml(s.icon)}</span>` : '';
         return `
           <button class="shortcut-btn" data-i="${i}" ${online ? '' : 'disabled'}>
@@ -1218,24 +1323,21 @@
     }
     loadShortcuts();
 
-    shortcutsBar.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.shortcut-btn');
-      if (!btn || btn.disabled) return;
-      const i = Number(btn.dataset.i);
-      const s = shortcuts[i];
-      if (!s) return;
-
+    // Perform the actual send + on-button feedback. targetOwner is optional;
+    // omitted, the server falls back to the shortcut's default target.
+    async function sendShortcut(s, targetOwner, btn) {
       const allBtns = shortcutsBar.querySelectorAll('.shortcut-btn');
       for (const b of allBtns) b.disabled = true;
 
       const lblEl = btn.querySelector('.lbl');
       const originalLabel = lblEl ? lblEl.textContent : '';
+      const body = targetOwner ? { id: s.id, targetOwner } : { id: s.id };
 
       try {
         const r = await fetch('/shortcut/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: s.id }),
+          body: JSON.stringify(body),
         });
         if (!r.ok) throw new Error();
         btn.classList.add('sent');
@@ -1250,6 +1352,75 @@
           renderShortcuts();
         }, 2000);
       }
+    }
+
+    // ===== Recipient picker (Proto A) =====
+    let pickerCtx = null; // { s, btn }
+
+    function openTargetPicker(s, btn, owners) {
+      pickerCtx = { s, btn };
+      const icon = s.icon ? `${s.icon} ` : '';
+      tpTitle.textContent = `${icon}${s.label}`;
+      tpTiles.innerHTML = owners.map((o) => {
+        const isDefault = o.owner === s.targetOwner;
+        return `
+          <button class="tp-tile${isDefault ? ' default' : ''}" data-owner="${escapeHtml(o.owner)}">
+            <span class="tp-dot"></span>
+            <span class="tp-name">${escapeHtml(o.nickname || o.owner)}</span>
+            ${isDefault ? '<span class="tp-badge">défaut</span>' : '<span class="tp-badge">&nbsp;</span>'}
+          </button>
+        `;
+      }).join('');
+      targetPicker.classList.add('open');
+    }
+
+    function closeTargetPicker() {
+      targetPicker.classList.remove('open');
+      pickerCtx = null;
+    }
+
+    // Tap outside the card dismisses.
+    targetPicker.addEventListener('click', (e) => {
+      if (e.target === targetPicker) closeTargetPicker();
+    });
+
+    tpTiles.addEventListener('click', (e) => {
+      const tile = e.target.closest('.tp-tile');
+      if (!tile || !pickerCtx) return;
+      const { s, btn } = pickerCtx;
+      const owner = tile.dataset.owner;
+      closeTargetPicker();
+      sendShortcut(s, owner, btn);
+    });
+
+    // PROTO-ONLY preview hook (remove before merge): with just 2 Pi the picker
+    // never triggers naturally. Type __previewPicker() in the kiosk devtools
+    // console to see the overlay with mock recipients.
+    window.__previewPicker = () => {
+      const btn = shortcutsBar.querySelector('.shortcut-btn') || document.createElement('button');
+      const s = shortcuts[0] || { label: 'À table', icon: '🍽', targetOwner: 'flo' };
+      openTargetPicker(s, btn, [
+        { owner: 'flo', nickname: 'Flo' },
+        { owner: 'marie', nickname: 'Marie' },
+        { owner: 'aurel', nickname: '' },
+      ]);
+    };
+
+    shortcutsBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('.shortcut-btn');
+      if (!btn || btn.disabled) return;
+      const s = shortcuts[Number(btn.dataset.i)];
+      if (!s) return;
+
+      const owners = onlineOwners();
+      // Zero-friction path: a single online peer sends straight to it (the one
+      // online owner, even if it isn't the shortcut's stored default).
+      if (owners.length <= 1) {
+        sendShortcut(s, owners[0] ? owners[0].owner : undefined, btn);
+        return;
+      }
+      // Ambiguous: ask who. Default target is pre-highlighted.
+      openTargetPicker(s, btn, owners);
     });
 
     // ===== Socket =====
