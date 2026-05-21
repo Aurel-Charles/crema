@@ -529,6 +529,87 @@
     .status.ok { color: var(--crema-accent-ink); font-weight: 600; }
     .status.err { color: var(--crema-danger); }
 
+    /* ===== Récap derniers échanges — mini-fil dans la colonne destinataire.
+     * Aperçu compact des 2-3 dernières paires question→réponse, pour voir d'un
+     * coup d'œil "ce qu'il se passe" sans aller sur l'écran du Pi ou /history.
+     * Masqué tant qu'il n'y a aucun échange. */
+    .recap { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+    .recap[hidden] { display: none; }
+    .recap-list { display: flex; flex-direction: column; gap: 8px; }
+    .recap-card {
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke-faint);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .recap-card.expired { opacity: 0.55; }
+    .recap-line { display: flex; align-items: baseline; gap: 8px; }
+    /* Initiale de l'expéditeur — mono, écho du marqueur A→F dans /history */
+    .recap-line .who {
+      flex-shrink: 0;
+      width: 16px;
+      text-align: center;
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--crema-accent-deep);
+    }
+    .recap-line .txt {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    /* La réponse est en retrait visuel : initiale + texte sourds, glyphe ↳ */
+    .recap-line.a .who { color: var(--crema-muted); }
+    .recap-line.a .txt { color: var(--crema-muted); }
+    .recap-line.a .txt::before { content: "↳ "; color: var(--crema-muted); }
+    .recap-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 24px;   /* aligné sous le texte, pas sous l'initiale */
+      font-variant-numeric: tabular-nums;
+    }
+    .recap-meta .time {
+      font-family: var(--crema-font-mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--crema-muted);
+    }
+    .recap-badge {
+      font-size: 10px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      line-height: 1.5;
+    }
+    /* Seul "en attente" porte l'or d'attention — même règle que /history */
+    .recap-badge.pending { background: var(--crema-attention); color: var(--crema-accent-ink); font-weight: 600; }
+    .recap-badge.neutral {
+      border: 1px solid var(--crema-stroke);
+      color: var(--crema-muted);
+      font-family: var(--crema-font-mono);
+      font-weight: 500;
+    }
+    .recap-more {
+      align-self: flex-start;
+      margin-top: 2px;
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
+      font-size: 9.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--crema-muted);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .recap-more:active { color: var(--crema-accent-deep); }
+
     /* ===== Responsive — placé EN FIN de feuille pour gagner en ordre de
      * cascade sur les règles de base (form/header) de même spécificité. ===== */
 
@@ -629,6 +710,12 @@
       <select id="target" required aria-label="Destinataire" hidden>
         <option value="">Recherche…</option>
       </select>
+
+      <div class="recap" id="recap" hidden>
+        <div class="mono-label">Derniers échanges</div>
+        <div class="recap-list" id="recap-list"></div>
+        <a class="recap-more" href="/history">voir tout l'historique →</a>
+      </div>
     </div>
 
     <div class="field">
@@ -715,6 +802,8 @@
     const customRow = document.getElementById('custom-row');
     const customMins = document.getElementById('custom-mins');
     const envoiName = document.getElementById('envoi-name');
+    const recapEl = document.getElementById('recap');
+    const recapList = document.getElementById('recap-list');
 
     // ===== State =====
     let options = [];                 // string[]
@@ -722,6 +811,9 @@
     let ttlManuallySet = false;       // true once user clicks a preset
     let peers = [];
     let myOwner = '';                 // populated by loadMe(), used by the envoi hero
+    // owner → display name (nickname || owner). Fed by loadMe()/loadPeers() so
+    // the récap can resolve sender initials without its own /me|/peers fetches.
+    const nameMap = {};
 
     const MAX_CHARS = 120;
 
@@ -903,6 +995,7 @@
         const { owner, nickname } = await r.json();
         myOwner = owner ?? '';
         const shown = nickname || owner;
+        if (myOwner) nameMap[myOwner] = shown || myOwner;
         meLabel.innerHTML = shown
           ? `<span class="wm-sep">·</span> ${escapeHtml(shown)}`
           : '';
@@ -915,7 +1008,9 @@
     // This Pi's own nickname changed in /settings → refresh the wordmark.
     socket.on('profile:updated', ({ owner, nickname }) => {
       const shown = nickname || owner || myOwner;
+      if (myOwner) nameMap[myOwner] = shown || myOwner;
       meLabel.innerHTML = shown ? `<span class="wm-sep">·</span> ${escapeHtml(shown)}` : '';
+      scheduleRecapRefetch();  // my initial may now read differently
     });
 
     function renderPeerPicker() {
@@ -1018,6 +1113,7 @@
       try {
         const r = await fetch('/peers');
         peers = await r.json();
+        for (const p of peers) if (p.owner) nameMap[p.owner] = p.nickname || p.owner;
         const prev = targetSel.value;
 
         // Le <select> reste la source de vérité (toujours masqué). L'UI
@@ -1055,6 +1151,97 @@
         renderHero();
       }
     }
+
+    // ===== Récap derniers échanges =====
+    // Resolve a sender's display initial (nickname || owner → first char). The
+    // récap is indexed by owner so a rename never rewrites the past; names are
+    // resolved at render time from nameMap (fed by loadMe/loadPeers).
+    function recapNameFor(owner) { return (owner && nameMap[owner]) || owner || '?'; }
+    function recapInitial(owner) { return recapNameFor(owner).charAt(0).toUpperCase() || '?'; }
+
+    // Walk messages newest→oldest, pairing each reply with the question it
+    // answers (replyToText carries the original). The question message is
+    // "consumed" so it isn't also shown as a standalone card. Unanswered
+    // messages stay as single cards. Stop after `max` exchanges.
+    function buildExchanges(messages, max = 3) {
+      const consumed = new Set();
+      const out = [];
+      for (const m of messages) {
+        if (out.length >= max) break;
+        if (consumed.has(m.id)) continue;
+        if (m.isReply && (m.replyToText || m.replyToMsgId)) {
+          consumed.add(m.id);
+          if (m.replyToMsgId) consumed.add(m.replyToMsgId);
+          // An incoming reply answers a message I sent (question = me);
+          // an outgoing reply answers a message the peer sent (question = m.to).
+          const answerSender = m.direction === 'in' ? m.from : myOwner;
+          const questionSender = m.direction === 'in' ? myOwner : m.to;
+          out.push({
+            question: { text: m.replyToText || '(message)', sender: questionSender },
+            answer: { text: m.text, sender: answerSender },
+            time: m.createdAt,
+            status: 'replied',
+          });
+        } else {
+          out.push({
+            question: { text: m.text, sender: m.direction === 'out' ? myOwner : m.from },
+            answer: null,
+            time: m.createdAt,
+            status: m.status,
+          });
+        }
+      }
+      return out;
+    }
+
+    function recapBadge(status) {
+      switch (status) {
+        case 'pending': return '<span class="recap-badge pending">en attente</span>';
+        case 'read':    return '<span class="recap-badge neutral">vu</span>';
+        case 'replied': return '<span class="recap-badge neutral">répondu</span>';
+        case 'expired': return '<span class="recap-badge neutral">expiré</span>';
+        default:        return '';  // sent / received → no badge
+      }
+    }
+
+    function renderExchange(ex) {
+      const time = hourMinFmt.format(new Date(ex.time));
+      const qLine = `<div class="recap-line q"><span class="who">${escapeHtml(recapInitial(ex.question.sender))}</span><span class="txt">${escapeHtml(ex.question.text)}</span></div>`;
+      const aLine = ex.answer
+        ? `<div class="recap-line a"><span class="who">${escapeHtml(recapInitial(ex.answer.sender))}</span><span class="txt">${escapeHtml(ex.answer.text)}</span></div>`
+        : '';
+      // A paired card already shows the answer → the "répondu" badge would be
+      // redundant. Keep the badge only for standalone (still-open) messages.
+      const badge = ex.answer ? '' : recapBadge(ex.status);
+      const cls = ex.status === 'expired' ? ' expired' : '';
+      return `<div class="recap-card${cls}">${qLine}${aLine}<div class="recap-meta"><span class="time">${time}</span>${badge}</div></div>`;
+    }
+
+    function renderRecap(exchanges) {
+      if (!exchanges.length) { recapEl.hidden = true; return; }
+      recapList.innerHTML = exchanges.map(renderExchange).join('');
+      recapEl.hidden = false;
+    }
+
+    async function loadRecap() {
+      try {
+        const r = await fetch('/history.json?limit=20');
+        const data = await r.json();
+        const flat = (data.groups || []).flatMap((g) => g.messages);
+        renderRecap(buildExchanges(flat, 3));
+      } catch {
+        recapEl.hidden = true;  // network blip → just hide, don't show a broken box
+      }
+    }
+
+    // Debounced refetch — a burst of inserts / status pings fires one reload.
+    let recapTimer = null;
+    function scheduleRecapRefetch() {
+      if (recapTimer) clearTimeout(recapTimer);
+      recapTimer = setTimeout(() => { recapTimer = null; loadRecap(); }, 250);
+    }
+    socket.on('history:new', scheduleRecapRefetch);
+    socket.on('msg:status', scheduleRecapRefetch);
 
     document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1107,8 +1294,9 @@
     renderPresets();
     updateCharCount();
     updatePresetExpiryHints();
-    loadMe();
-    loadPeers();
+    // Resolve names first so the récap's sender initials are correct on first
+    // paint; thereafter it self-refreshes via the history:new / msg:status events.
+    Promise.all([loadMe(), loadPeers()]).then(loadRecap);
     setInterval(loadPeers, 5000);
     // Keep the "→ HH:MM" hints honest as time passes (mainly affects
     // "Jusque ce soir" which counts down toward 22:00).

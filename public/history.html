@@ -20,6 +20,7 @@
       background: var(--crema-bg);
       color: var(--crema-text);
       min-height: 100vh;
+      overflow-x: hidden;  /* filet de sécurité : aucun scroll horizontal */
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
 
@@ -62,7 +63,14 @@
       display: flex;
       flex-direction: column;
       gap: 24px;
+      /* Le fil se lit en colonne : centré et plafonné pour ne pas s'étirer sur
+       * toute la largeur d'un écran desktop (cartes trop larges, milieu vide). */
+      width: 100%;
+      max-width: 820px;
+      margin: 0 auto;
     }
+    /* En-tête aligné sur la largeur du fil (même colonne centrée) */
+    header { max-width: 820px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 
     /* Day headers — signature kerned, sized for hierarchy */
     .day h2 {
@@ -82,7 +90,10 @@
       background: var(--crema-surface);
       border: 1px solid var(--crema-stroke-faint);
       border-radius: 14px;
-      padding: 12px 14px;
+      /* padding-left = 26px : laisse la gouttière du point arc-en-ciel
+       * (.msg-card::before dans theme.css). Sans ça, le raccourci écrase le
+       * padding-left de theme.css et le point chevauche le texte. */
+      padding: 12px 14px 12px 26px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -92,7 +103,9 @@
     .msg-meta {
       display: flex;
       align-items: center;
-      gap: 10px;
+      flex-wrap: wrap;        /* nom long + heure + badge passent à la ligne */
+      gap: 6px 10px;
+      min-width: 0;
       font-size: 13px;
       color: var(--crema-muted);
       font-variant-numeric: tabular-nums;
@@ -108,6 +121,15 @@
       color: var(--crema-muted);
       font-weight: 400;
       margin: 0 3px;
+    }
+    /* Mobile : initiales compactes (A → F). Desktop : noms complets, plus
+     * d'espace donc plus de détail. Les deux sont dans le markup ; on bascule
+     * en CSS au breakpoint. */
+    .msg-meta .direction .full { display: none; }
+    @media (min-width: 700px) {
+      .msg-meta .direction .full { display: inline; }
+      .msg-meta .direction .init { display: none; }
+      .msg-meta .direction { letter-spacing: 0.01em; }
     }
     .msg-meta .time { color: var(--crema-muted); }
     .msg-meta .status {
@@ -141,6 +163,7 @@
       line-height: 1.4;
       padding-left: 10px;
       border-left: 2px solid var(--crema-stroke-faint);
+      overflow-wrap: anywhere;  /* un long mot/URL ne déborde plus la carte */
     }
 
     .msg-text {
@@ -148,6 +171,7 @@
       line-height: 1.4;
       white-space: pre-wrap;
       word-wrap: break-word;
+      overflow-wrap: anywhere;
     }
     .msg-card.msg-in.is-reply .msg-text::before {
       content: "↩";
@@ -280,7 +304,11 @@
       const toName   = nameFor(msg.direction === 'out' ? msg.to   : myOwner);
       const fromTitle = fromName ?? '?';
       const toTitle   = toName ?? '?';
-      const directionHtml = `<span class="direction" title="${esc(fromTitle)} → ${esc(toTitle)}">${esc(initial(fromName))}<span class="arrow">→</span>${esc(initial(toName))}</span>`;
+      const directionHtml = `<span class="direction" title="${esc(fromTitle)} → ${esc(toTitle)}">`
+        + `<span class="full">${esc(fromName ?? '?')}</span><span class="init">${esc(initial(fromName))}</span>`
+        + `<span class="arrow">→</span>`
+        + `<span class="full">${esc(toName ?? '?')}</span><span class="init">${esc(initial(toName))}</span>`
+        + `</span>`;
       const status = statusLabel(msg.status);
       const statusHtml = status
         ? `<span class="status ${status.cls}">${status.label}</span>`
