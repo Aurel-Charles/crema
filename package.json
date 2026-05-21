@@ -1,7 +1,7 @@
 {
   "name": "crema",
-  "version": "0.6.4",
-  "description": "Pi messenger — V6.4 Direction Sauge visual rework",
+  "version": "0.7.0",
+  "description": "Pi messenger — V7.0 dual transport (broker primary + p2p fallback)",
   "type": "module",
   "main": "server.js",
   "scripts": {

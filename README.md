@@ -9,7 +9,7 @@ in idle as an ambient sage clock with day/night theming, shows who else is
 online on the LAN, and exposes its configured shortcuts at the bottom of the
 screen.
 
-**Current version:** [v6.4.0](https://github.com/Aurel-Charles/crema/releases/tag/v6.4.0)
+**Current version:** [v7.0.0](https://github.com/Aurel-Charles/crema/releases/tag/v7.0.0)
 — see [CLAUDE.md](./CLAUDE.md) for the full project spec and roadmap.
 
 ## What works today
