@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { INSTANCE_ID, OWNER, MAX_LABEL_LENGTH, MAX_REPLIES } from './config.js';
-import { clampTtl, findShortcut } from './store.js';
+import { clampTtl, findShortcut, getDefaultTarget } from './store.js';
 import * as db from './db.js';
 import { msgLog, errLog } from './logger.js';
 
@@ -215,10 +215,12 @@ export function init({ app, io, transport }) {
     const shortcut = findShortcut(id);
     if (!shortcut) return res.status(404).json({ error: 'Raccourci introuvable' });
 
-    // Proto A — the screen may override the recipient at tap-time when several
-    // peers are online. The shortcut's targetOwner stays the default.
+    // Recipient resolution: explicit override (the screen passes the current
+    // global target for global shortcuts) → the shortcut's pinned target →
+    // the stored global recipient. Empty everywhere = no destination.
     const override = typeof req.body?.targetOwner === 'string' ? req.body.targetOwner.trim() : '';
-    const wantOwner = override || shortcut.targetOwner;
+    const wantOwner = override || shortcut.targetOwner || getDefaultTarget();
+    if (!wantOwner) return res.status(400).json({ error: 'Aucun destinataire' });
 
     const peer = transport.findPeer({ owner: wantOwner });
     if (!peer) return res.status(404).json({ error: `${wantOwner} hors ligne` });

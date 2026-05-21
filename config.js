@@ -54,6 +54,9 @@ export const DATA_DIR = join(__dirname, 'data');
 export const REPLIES_FILE = join(DATA_DIR, 'replies.json');
 export const SHORTCUTS_FILE = join(DATA_DIR, 'shortcuts.json');
 export const DND_FILE = join(DATA_DIR, 'dnd.json');
+// Global recipient selected on the screen — the owner that "global" shortcuts
+// (those created without a pinned target) are sent to. Single-target for now.
+export const DEFAULT_TARGET_FILE = join(DATA_DIR, 'default-target.json');
 // V7.1 — display nickname (and room labels later). owner stays the immutable
 // routing identity; this is a presentation layer propagated on top of it.
 export const IDENTITY_FILE = join(DATA_DIR, 'identity.json');
