@@ -14,10 +14,15 @@ screen.
 
 ## What works today
 
-- **Symmetric peer-to-peer** — identical code on every Pi, no central server,
-  no single point of failure.
-- **mDNS auto-discovery** — Pis find each other on the LAN automatically;
-  add another Pi by flashing the same image.
+- **Symmetric peer-to-peer** — identical code on every Pi; add another Pi by
+  flashing the same image and it gets discovered automatically.
+- **Dual transport (default)** — every Pi runs a broker client **and** the
+  p2p stack at the same time. The broker is the primary path; direct Pi-to-Pi
+  HTTP is the always-warm fallback, with automatic failover in both
+  directions and no split-brain. A pure-p2p mode (mDNS only, no broker) and a
+  pure-broker mode are also available — see [Transport](#transport).
+- **mDNS auto-discovery** — Pis find each other on the LAN automatically, and
+  in dual mode the broker itself is discovered the same way (`_crema-broker._tcp`).
 - **Active health check** — each Pi pings every peer's `/me` every 10 s and
   drops the entry after 3 consecutive failures (~30 s). Catches reboots and
   power cuts that mDNS "goodbye" packets miss.
@@ -101,22 +106,79 @@ screen.
 Each Pi runs the same Node process which:
 - Serves the PWA (`/`), the settings page (`/settings`), and the display
   kiosk (`/display`) over Express.
-- Announces itself on the LAN as `_crema._tcp` via mDNS, with `owner` and
-  `instanceId` in the TXT record.
-- Browses for other `_crema._tcp` services and keeps a live peer map. A
-  background health check pings each peer's `/me` every 10 s to evict
-  unreachable entries that mDNS missed.
+- Sends and receives messages through a swappable **transport** seam
+  (`transport.js`) — see [Transport](#transport) for the three modes.
 - Pushes incoming messages, presence events, replies/shortcuts config
   changes, and own-message expiry notifications to the display over
   Socket.IO.
 
 When the PWA sends, it `POST`s to its local Crema server, which generates a
-message id + `expiresAt`, forwards the payload to the target peer's
-`/inbox`, and starts a local expiry timer. The peer's `/inbox` broadcasts
-to its own display. When the peer fires a reply via `/reply`, the payload
-includes `replyToMsgId`, which lets the original sender's server clear its
-expiry timer before the toast fires. Shortcut taps on the Pi go through
-`/shortcut/send` which reuses the same pipeline as the PWA path.
+message id + `expiresAt`, hands the payload to the transport for delivery to
+the target peer, and starts a local expiry timer. On the recipient, inbound
+messages broadcast to its own display. When the peer fires a reply, the
+payload includes `replyToMsgId`, which lets the original sender's server
+clear its expiry timer before the "expired" toast fires. Shortcut taps on the
+Pi go through `/shortcut/send` which reuses the same pipeline as the PWA path.
+
+## Transport
+
+How a message gets from one Pi to another is abstracted behind `transport.js`,
+selected by the `CREMA_TRANSPORT` env var (default **`dual`**). The full wire
+protocol is in [`docs/broker-protocol.md`](./docs/broker-protocol.md).
+
+| Mode | What it does | Discovery | Fallback |
+|------|--------------|-----------|----------|
+| **`dual`** (default) | Broker client **and** p2p stack run at once. Broker is primary, direct HTTP is the warm fallback. | Broker via mDNS (`_crema-broker._tcp`) or pinned URL; peers via mDNS | Automatic, both directions |
+| **`p2p`** | Direct Pi↔Pi HTTP only (`POST /inbox`, `/reply`, `/read-receipt`, `/typing`), with retry + `.local` re-resolution. | Peers via mDNS (`_crema._tcp`) | None — relies on the avahi/mDNS stack |
+| **`broker`** | Socket.IO client to a central LAN relay only. | None (central directory on the relay) | None |
+
+- **Sending in dual** (`transport-dual.js`): broker first when connected; on
+  any non-ok it logs `deliver:fallback` and routes over direct HTTP — never
+  both, so no duplicate delivery. **Receiving** is dual-capable for free: the
+  p2p HTTP routes and the broker's `onDeliver` callback are always wired.
+- **Aggregated presence**: a peer is only marked down when *no* path can see
+  it anymore. The display's bottom-left watermark reflects the live path —
+  empty when the broker is healthy, otherwise `p2p · direct` or `hors-ligne`.
+- **The broker** (`broker/server.js`) is a stateless relay: an `owner→socket`
+  directory plus `deliver` routing, persisting nothing. Each Pi remains the
+  sole owner of its own SQLite history. It's plain JS and runs anywhere
+  Node does (testable on a Mac with `cd broker && npm start`).
+
+### Switching transport on a Pi
+
+The switch scripts drop a systemd override (`crema.service.d/transport.conf`)
+without touching the base `crema.service` — fully reversible:
+
+```bash
+./pin-broker.sh ws://<broker-ip>:4000 [token]   # dual, broker pinned (skips discovery — robust)
+./reset-transport.sh                            # back to default: dual + broker auto-discovery
+./disable-broker.sh                             # force pure p2p (mDNS only)
+./enable-broker.sh ws://<broker-ip>:4000 [token] # force pure broker (debug; no fallback)
+```
+
+Pinning the broker to a DHCP-reserved static IP is the robust choice: it skips
+mDNS discovery for the primary path while keeping p2p as the fallback.
+
+### Running the broker relay
+
+Run this on a dedicated always-on LAN box (not a Pi), once:
+
+```bash
+git clone https://github.com/Aurel-Charles/crema.git
+cd crema/broker
+# Optional shared secret — Pis must then register with the same token:
+CREMA_BROKER_TOKEN=s3cret ./install-broker.sh
+```
+
+`install-broker.sh` installs deps, writes/enables `crema-broker.service`, and
+starts it. Verify with `curl http://localhost:4000/health` — it returns the
+list of connected owners, e.g. `{"ok":true,"peers":["Aurel","Flo"]}`.
+
+Pis on the default dual transport auto-discover the relay over mDNS — nothing
+to run on them. For that, the broker box needs the optional native `mdns`
+module (`sudo apt install libavahi-compat-libdnssd-dev`, then re-run
+`npm install` in `broker/`); the relay works fine without it, auto-discovery
+just stays off and you pin the URL on each Pi instead.
 
 ## Design
 
@@ -142,11 +204,15 @@ expiry timer before the toast fires. Shortcut taps on the Pi go through
 
 ## Tech stack
 
-Node.js 20, Express, Socket.IO, [`mdns`](https://github.com/agnat/node_mdns)
-(via avahi compat on Linux), [`suncalc`](https://github.com/mourner/suncalc),
+Node.js 20, Express, Socket.IO (display push + broker transport),
+[`socket.io-client`](https://github.com/socketio/socket.io) (Pi → broker),
+[`mdns`](https://github.com/agnat/node_mdns) (via avahi compat on Linux —
+peer and broker discovery), [`suncalc`](https://github.com/mourner/suncalc),
 [`better-sqlite3`](https://github.com/WiseLibs/better-sqlite3) (synchronous,
 WAL mode, no armv7 prebuild so it compiles from source on 32-bit Pi OS).
-Frontend is vanilla HTML/CSS/JS — no framework.
+Frontend is vanilla HTML/CSS/JS — no framework. The broker relay (`broker/`)
+is a standalone Node + Socket.IO process with no native deps beyond an
+optional `mdns` for self-advertisement.
 
 Per-Pi runtime state lives in `data/` (gitignored): `replies.json` for the
 quick-reply config, `shortcuts.json` for the touch shortcuts, `dnd.json`
@@ -155,7 +221,9 @@ journal.
 
 The server is split into focused modules (`config.js`, `peers.js`,
 `store.js`, `messaging.js`, `db.js`) wired together by a thin `server.js`
-entrypoint.
+entrypoint. Delivery sits behind the `transport.js` seam with one
+implementation per mode (`transport-dual.js`, `transport-p2p.js`,
+`transport-broker.js`) plus `discover-broker.js` for mDNS broker discovery.
 
 ## Setting up a new Pi
 
@@ -226,7 +294,17 @@ ssh <user>@pi-<name>.local pkill -f chromium
 - **Server status:** `sudo systemctl status crema`
 - **Manual restart:** `sudo systemctl restart crema`
 - **Verify mDNS announcement:** `avahi-browse _crema._tcp -tr`
-  (install `avahi-utils` if missing)
+  (install `avahi-utils` if missing); the broker advertises `_crema-broker._tcp`.
+- **Which transport path is live:** glance at the display's bottom-left
+  watermark (empty = broker healthy), or grep the logs for `deliver:fallback`.
+  Confirm the broker sees both Pis: `curl http://<broker-ip>:4000/health`.
+- **Switch transport:** `./pin-broker.sh`, `./reset-transport.sh`,
+  `./disable-broker.sh`, `./enable-broker.sh` — see [Transport](#transport).
+  Each finishes with a `sudo systemctl restart`, so enter the sudo password
+  and let the script run to the end (otherwise the override is written but
+  not loaded).
+- **Broker logs/status:** `sudo journalctl -u crema-broker -f` /
+  `sudo systemctl status crema-broker` (on the broker box, not the Pi).
 - **Override location for sunrise/sunset:** set `CREMA_LAT` / `CREMA_LON` in
   `/etc/systemd/system/crema.service` under `[Service]` as `Environment=`.
 - **Inspect / reset per-Pi config:** `cat ~/crema/data/replies.json` or
@@ -268,10 +346,15 @@ ssh <user>@pi-<name>.local pkill -f chromium
 ```
 server.js              entrypoint: Express + Socket.IO, page routes, wiring, shutdown
 config.js              env, owner derivation, paths, TTL bounds, constants
-peers.js               mDNS advertise + browse, peer map, dedup, health check
+transport.js           transport selector — picks dual/p2p/broker from CREMA_TRANSPORT
+transport-dual.js      composite: broker primary + p2p fallback, presence aggregation (default)
+transport-p2p.js       direct Pi↔Pi HTTP (wraps peers.js); retry + .local re-resolution
+transport-broker.js    Socket.IO client to the LAN relay
+discover-broker.js     mDNS discovery of the broker (_crema-broker._tcp) on the Pi
+peers.js               mDNS advertise + browse, peer map, dedup, health check (p2p path)
 store.js               atomic JSON persistence for replies, shortcuts, DND + their routes
-messaging.js           pendingMessages, sendToPeer, /send /shortcut/send /reply /inbox,
-                       /read-receipt, /typing, msg:status + history:new broadcasts
+messaging.js           pendingMessages, send pipeline, /send /shortcut/send /reply /inbox,
+                       /read-receipt, /typing, inbound dispatch, msg:status + history:new
 db.js                  SQLite history (better-sqlite3, WAL): insert/update/group-by-day
 logger.js              structured event log: writes to events table, mirrors to
                        stdout, broadcasts 'event:new' over Socket.IO
@@ -294,5 +377,16 @@ data/                  per-Pi runtime state (gitignored)
 start.sh               wraps `node server.js` with nvm sourcing
 start-display.sh       Chromium kiosk launcher with restart loop
 install-pi.sh          one-shot Pi setup (systemd + autostart + emoji + blanking + build tools)
+pin-broker.sh          transport switch: dual + broker pinned to a URL (p2p fallback kept)
+reset-transport.sh     transport switch: back to default dual + broker auto-discovery
+disable-broker.sh      transport switch: force pure p2p (mDNS only)
+enable-broker.sh       transport switch: force pure broker (debug, no fallback)
+broker/
+  server.js            stateless LAN relay: owner→socket registry + deliver routing + /health
+  install-broker.sh    one-shot broker setup on a dedicated box (crema-broker.service)
+  start-broker.sh      wraps `node server.js` with nvm sourcing
+  test-protocol.mjs    standalone protocol smoke test against a running broker
+docs/
+  broker-protocol.md   the broker wire protocol (register / deliver / presence)
 CLAUDE.md              project spec, design, roadmap
 ```
