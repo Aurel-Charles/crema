@@ -243,10 +243,25 @@
       font-weight: 700;
       line-height: 1;
     }
+    .peer-names {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+    }
     .peer-btn .owner {
       font-size: 15px;
       color: var(--crema-text);
     }
+    /* Secondary disambiguator — the routing owner, shown only when a nickname
+     * replaces it in the primary line. */
+    .peer-btn .peer-sub {
+      font-family: var(--crema-font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--crema-muted);
+    }
+    .peer-btn.active .peer-sub { color: var(--crema-accent-deep); }
     .peer-btn.active { border-color: var(--crema-accent); }
     .peer-btn.active .initial { background: var(--crema-accent); color: var(--crema-accent-ink); }
     .peer-btn.active .owner { color: var(--crema-accent-deep); font-weight: 600; }
@@ -423,24 +438,22 @@
       gap: 12px;
     }
     .envoi-name {
+      /* flex-item so a long nickname wraps inside the available width instead
+       * of pushing the "changer" pill off-screen. font-size is set by JS
+       * (sizeHeroName) based on length; this is the short-name default. */
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-wrap: anywhere;
       font-family: var(--crema-font-serif);
       font-style: italic;
-      font-size: clamp(64px, 22vw, 110px);
-      line-height: 0.9;
+      font-size: clamp(56px, 20vw, 110px);
+      line-height: 0.92;
       letter-spacing: -0.04em;
       color: var(--crema-accent-deep);
       text-transform: lowercase;
       margin: 2px 0 0;
+      padding-bottom: 0.1em;  /* room for the italic descenders */
     }
-    .envoi-meta {
-      font-family: var(--crema-font-mono);
-      font-weight: 600;
-      font-size: 10px;
-      color: var(--crema-muted);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-    }
-
     .custom-row {
       display: flex;
       align-items: center;
@@ -519,49 +532,51 @@
     /* ===== Responsive — placé EN FIN de feuille pour gagner en ordre de
      * cascade sur les règles de base (form/header) de même spécificité. ===== */
 
-    /* Tablette / desktop ≥600px : le PWA devient un panneau crème centré. */
+    /* Tablette / desktop ≥600px : plein écran (pas de carte). Le PWA remplit la
+     * fenêtre — le dégradé chaud du body sert de fond, le liseré arc-en-ciel
+     * (.app::after) reste sur le bord gauche. On élargit juste les marges. */
     @media (min-width: 600px) {
-      body {
-        align-items: center;
-        justify-content: center;
-        padding: max(env(safe-area-inset-top), 32px) 24px 32px;
-      }
-      .app {
-        flex: 0 1 auto;
-        max-width: 600px;
-        margin: auto;
-        background: var(--crema-bg);
-        border: 1px solid var(--crema-stroke);
-        border-radius: 28px;
-        box-shadow: 0 30px 90px -45px rgba(196, 101, 156, 0.5),
-                    0 2px 8px -4px rgba(42, 26, 68, 0.12);
-        overflow: hidden;
-      }
-      header { padding: 28px 28px 0; }
-      form { padding: 24px 28px 28px; }
+      header { padding: 28px 40px 0; }
+      form { padding: 28px 40px 40px; }
     }
 
-    /* Desktop ≥900px : deux colonnes — destinataire (sticky) | composition. */
+    /* Desktop ≥900px : deux colonnes — destinataire (sticky) | composition.
+     * Pleine largeur de fenêtre (pas de plafond). */
     @media (min-width: 900px) {
-      .app { max-width: 920px; }
-      header { padding: 28px 36px 0; }
+      header { padding: 28px 48px 0; }
       form {
         display: grid;
-        grid-template-columns: minmax(280px, 320px) 1fr;
-        column-gap: 44px;
+        /* Col 1 (hero destinataire) absorbe la largeur excédentaire — le nom
+         * géant grandit avec la fenêtre (Mega Type). Col 2 (composition) est
+         * plafonnée pour que le textarea reste confortable, donc aucune marge
+         * morte à droite sur grand écran. */
+        grid-template-columns: minmax(300px, 1fr) minmax(380px, 760px);
+        column-gap: 48px;
         row-gap: 18px;
         align-content: start;
-        padding: 28px 36px 36px;
+        padding: 28px 48px 44px;
       }
-      /* Colonne 1 — le hero destinataire, collé en haut */
+      /* Colonne 1 — le hero destinataire, collé en haut. Span sur toutes les
+       * rangées : la colonne occupe toute la hauteur, donc déplier la liste
+       * des Pi remplit l'espace vide sous le hero SANS pousser les rangées de
+       * la colonne 2 (message, options, envoi). */
       .envoi-field {
         grid-column: 1;
-        grid-row: 1;
+        grid-row: 1 / span 50;
         align-self: start;
         position: sticky;
         top: 28px;
       }
       .envoi-hero { padding-top: 4px; }
+      /* Colonne étroite : on empile le nom puis le bouton (au lieu de les
+       * mettre côte à côte), pour que le nom prenne toute la largeur dispo. */
+      .envoi-target {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+      }
+      .envoi-name { width: 100%; }
+      .envoi-changer { margin-bottom: 0; }
       /* Colonne 2 — message, options, disponible, status, envoi */
       form > .field:not(.envoi-field),
       form > .status,
@@ -609,7 +624,6 @@
           <button type="button" class="envoi-changer" id="envoi-changer" hidden
                   aria-expanded="false">changer de destinataire<span class="caret" aria-hidden="true">▾</span></button>
         </div>
-        <div class="envoi-meta" id="envoi-meta"></div>
       </div>
       <div class="peer-picker" id="peer-picker" hidden></div>
       <select id="target" required aria-label="Destinataire" hidden>
@@ -701,7 +715,6 @@
     const customRow = document.getElementById('custom-row');
     const customMins = document.getElementById('custom-mins');
     const envoiName = document.getElementById('envoi-name');
-    const envoiMeta = document.getElementById('envoi-meta');
 
     // ===== State =====
     let options = [];                 // string[]
@@ -773,6 +786,10 @@
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
       }[c]));
     }
+
+    // Effective display name = nickname || owner. owner stays the routing
+    // identity (the <select> value is always instanceId).
+    function displayName(p) { return (p && (p.nickname || p.owner)) || ''; }
 
     function computeTtlMs(preset) {
       if (preset === '30s') return 30_000;
@@ -883,10 +900,11 @@
     async function loadMe() {
       try {
         const r = await fetch('/me');
-        const { owner } = await r.json();
+        const { owner, nickname } = await r.json();
         myOwner = owner ?? '';
-        meLabel.innerHTML = owner
-          ? `<span class="wm-sep">·</span> ${escapeHtml(owner)}`
+        const shown = nickname || owner;
+        meLabel.innerHTML = shown
+          ? `<span class="wm-sep">·</span> ${escapeHtml(shown)}`
           : '';
         renderHero();
       } catch {
@@ -894,29 +912,81 @@
       }
     }
 
+    // This Pi's own nickname changed in /settings → refresh the wordmark.
+    socket.on('profile:updated', ({ owner, nickname }) => {
+      const shown = nickname || owner || myOwner;
+      meLabel.innerHTML = shown ? `<span class="wm-sep">·</span> ${escapeHtml(shown)}` : '';
+    });
+
     function renderPeerPicker() {
       // Highlight the currently selected peer (mirrors targetSel.value).
       const current = targetSel.value;
-      peerPicker.innerHTML = peers.map((p) => `
+      peerPicker.innerHTML = peers.map((p) => {
+        const name = displayName(p);
+        // Secondary = owner, only when a nickname is set (otherwise the name
+        // already *is* the owner → no redundant "aurel · aurel").
+        const sub = (p.nickname && p.nickname.trim())
+          ? `<span class="peer-sub">${escapeHtml(p.owner)}</span>` : '';
+        return `
         <button type="button" class="peer-btn ${p.instanceId === current ? 'active' : ''}"
                 data-instance-id="${escapeHtml(p.instanceId)}">
-          <span class="initial">${escapeHtml(p.owner.charAt(0).toUpperCase())}</span>
-          <span class="owner">${escapeHtml(p.owner)}</span>
+          <span class="initial">${escapeHtml(name.charAt(0).toUpperCase())}</span>
+          <span class="peer-names"><span class="owner">${escapeHtml(name)}</span>${sub}</span>
         </button>
-      `).join('');
+      `;
+      }).join('');
+    }
+
+    // Fit the hero name to its available width: binary-search the largest font
+    // size (≤110px) at which the widest line fits, so a long nickname shrinks
+    // instead of breaking mid-word. Works in every layout — the element's
+    // clientWidth reflects the real space in both the mobile row (flex:1) and
+    // the desktop column (width:100%). 110px stays for short owners like "flo".
+    const HERO_MAX_FS = 110, HERO_MIN_FS = 20;
+    function fitHeroName() {
+      const avail = envoiName.clientWidth;
+      if (!avail) return;  // not laid out yet
+      // Measure with intra-word breaking OFF: a word wider than `avail` then
+      // overflows and bumps scrollWidth, which is what drives the shrink. With
+      // overflow-wrap:anywhere (the CSS default here) the browser would break
+      // the word to fit, so scrollWidth never exceeds avail and we'd never
+      // shrink. The browser still wraps at spaces, so scrollWidth == widest
+      // line == widest word → the search stays monotonic.
+      const prevWrap = envoiName.style.overflowWrap;
+      const prevBreak = envoiName.style.wordBreak;
+      envoiName.style.overflowWrap = 'normal';
+      envoiName.style.wordBreak = 'normal';
+      let lo = HERO_MIN_FS, hi = HERO_MAX_FS, best = HERO_MIN_FS;
+      for (let i = 0; i < 9; i++) {
+        const mid = (lo + hi) / 2;
+        envoiName.style.fontSize = mid + 'px';
+        if (envoiName.scrollWidth <= avail + 0.5) { best = mid; lo = mid; }
+        else hi = mid;
+      }
+      envoiName.style.fontSize = Math.floor(best) + 'px';
+      // Restore the CSS safety net (breaks a single word longer than avail even
+      // at the min size — pathological, but never overflows the panel).
+      envoiName.style.overflowWrap = prevWrap;
+      envoiName.style.wordBreak = prevBreak;
     }
 
     // "tu envoies à {peer}" hero — mirror of the picker's selection
     function renderHero() {
       if (peers.length === 0) {
         envoiName.textContent = '…';
-        envoiMeta.textContent = '';
+        envoiName.style.fontSize = '';
         return;
       }
       const current = peers.find((p) => p.instanceId === targetSel.value) || peers[0];
-      envoiName.textContent = current.owner.toLowerCase();
-      // "depuis aurel" vit déjà dans le header → le meta ne porte que l'instant.
-      envoiMeta.textContent = 'maintenant';
+      envoiName.textContent = displayName(current).toLowerCase();
+      fitHeroName();
+    }
+
+    // Re-fit when the viewport changes (row↔column breakpoint, rotation) and
+    // once the serif web font lands (first paint may measure the fallback).
+    window.addEventListener('resize', fitHeroName);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(fitHeroName);
     }
 
     // Replier / déplier la liste des destinataires.
@@ -964,7 +1034,7 @@
         }
 
         targetSel.innerHTML = peers
-          .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(p.owner)}</option>`)
+          .map((p) => `<option value="${escapeHtml(p.instanceId)}">${escapeHtml(displayName(p))}</option>`)
           .join('');
         targetSel.value = peers.find((p) => p.instanceId === prev)
           ? prev

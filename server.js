@@ -37,7 +37,7 @@ app.get('/history', (req, res) => res.sendFile(join(PUBLIC_DIR, 'history.html'))
 app.get('/logs', (req, res) => res.sendFile(join(PUBLIC_DIR, 'logs.html')));
 
 app.get('/me', (req, res) => {
-  res.json({ owner: OWNER, instanceId: INSTANCE_ID, transport: transport.health() });
+  res.json({ owner: OWNER, instanceId: INSTANCE_ID, nickname: store.getNickname(), transport: transport.health() });
 });
 
 app.get('/peers', (req, res) => {
@@ -83,7 +83,7 @@ io.on('connection', (socket) => {
 
 db.init();
 logger.init({ io });
-await store.init({ app, io });
+await store.init({ app, io, transport });
 messaging.init({ app, io, transport });
 transport.init();
 

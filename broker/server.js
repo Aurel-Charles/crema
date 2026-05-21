@@ -15,7 +15,7 @@ export function startBroker({
   token = process.env.CREMA_BROKER_TOKEN ?? null,
   advertise = process.env.CREMA_BROKER_ADVERTISE !== '0',
 } = {}) {
-  // owner -> { socket, instanceId }
+  // owner -> { socket, instanceId, nickname }
   const registry = new Map();
   let advertisement = null;
 
@@ -36,7 +36,7 @@ export function startBroker({
     const list = [];
     for (const [owner, entry] of registry) {
       if (owner === exceptOwner) continue;
-      list.push({ owner, instanceId: entry.instanceId });
+      list.push({ owner, instanceId: entry.instanceId, nickname: entry.nickname || '' });
     }
     return list;
   }
@@ -55,7 +55,7 @@ export function startBroker({
   }
 
   io.on('connection', (socket) => {
-    socket.on('register', ({ owner, instanceId, token: peerToken } = {}) => {
+    socket.on('register', ({ owner, instanceId, nickname, token: peerToken } = {}) => {
       if (token && peerToken !== token) {
         socket.emit('register:denied', { error: 'bad token' });
         socket.disconnect(true);
@@ -79,11 +79,25 @@ export function startBroker({
 
       socket.data.owner = owner;
       socket.data.instanceId = instanceId;
-      registry.set(owner, { socket, instanceId });
+      socket.data.nickname = nickname || '';
+      registry.set(owner, { socket, instanceId, nickname: nickname || '' });
 
       socket.emit('peers', roster(owner));
-      socket.broadcast.emit('peer:up', { owner, instanceId });
-      log(`register ${owner} (${instanceId.slice(0, 8)}) — ${registry.size} online`);
+      socket.broadcast.emit('peer:up', { owner, instanceId, nickname: nickname || '' });
+      log(`register ${owner} (${instanceId.slice(0, 8)})${nickname ? ` "${nickname}"` : ''} — ${registry.size} online`);
+    });
+
+    // V7.1 — display nickname change. Not a re-register (that trips same-owner
+    // dedup); a presentation-only update we store and relay to everyone else.
+    socket.on('profile:update', ({ nickname } = {}) => {
+      const owner = socket.data.owner;
+      if (!owner) return;
+      const entry = registry.get(owner);
+      if (!entry || entry.socket !== socket) return;
+      entry.nickname = nickname || '';
+      socket.data.nickname = entry.nickname;
+      socket.broadcast.emit('profile:update', { owner, instanceId: entry.instanceId, nickname: entry.nickname });
+      log(`profile ${owner} → "${entry.nickname}"`);
     });
 
     socket.on('deliver', ({ to, kind, payload } = {}, ack) => {

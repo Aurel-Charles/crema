@@ -38,16 +38,22 @@ export function createDualTransport({ io }) {
   // path drops it. Without this, a broker disconnect would wrongly grey out a
   // peer that's still reachable over p2p (and flip the status badge to
   // "hors-ligne" instead of "p2p · direct"). All other events pass through.
-  const sources = new Map(); // instanceId -> { owner, sources: Set<'p2p'|'broker'> }
+  const sources = new Map(); // instanceId -> { owner, nickname, sources: Set<'p2p'|'broker'> }
 
   function presenceUp(source, p) {
     if (!p?.instanceId) return;
     let e = sources.get(p.instanceId);
-    if (!e) { e = { owner: p.owner ?? '?', sources: new Set() }; sources.set(p.instanceId, e); }
+    if (!e) { e = { owner: p.owner ?? '?', nickname: '', sources: new Set() }; sources.set(p.instanceId, e); }
     if (p.owner) e.owner = p.owner;
     const wasEmpty = e.sources.size === 0;
+    // Forward when the peer first comes up OR its nickname changed (V7.1 hot
+    // update): peer:up is an idempotent upsert on the front-end side, so
+    // re-emitting on a name change is safe and is how nickname edits land.
+    const nick = p.nickname || '';
+    const nickChanged = nick !== e.nickname;
+    e.nickname = nick;
     e.sources.add(source);
-    if (wasEmpty) io.emit('peer:up', { instanceId: p.instanceId, owner: e.owner });
+    if (wasEmpty || nickChanged) io.emit('peer:up', { instanceId: p.instanceId, owner: e.owner, nickname: e.nickname });
   }
 
   function presenceDown(source, p) {
@@ -124,7 +130,7 @@ export function createDualTransport({ io }) {
     listPeers() {
       // Derived from the presence aggregator so a fresh client's peers:init
       // matches the net peer:up/peer:down stream exactly.
-      return [...sources.entries()].map(([instanceId, e]) => ({ instanceId, owner: e.owner }));
+      return [...sources.entries()].map(([instanceId, e]) => ({ instanceId, owner: e.owner, nickname: e.nickname }));
     },
 
     findPeer(desc) {
@@ -135,6 +141,14 @@ export function createDualTransport({ io }) {
     onDeliver(fn) {
       // Broker pushes inbound over WebSocket; P2P arrives via the HTTP routes.
       broker.onDeliver(fn);
+    },
+
+    // V7.1 — fan the nickname change out over both paths. Broker reaches peers
+    // that only see the relay; mDNS re-advertise reaches peers that only see
+    // the LAN. Each is a no-op when its path is down.
+    announceProfile() {
+      broker.announceProfile();
+      p2p.announceProfile();
     },
 
     async deliver(target, kind, payload) {

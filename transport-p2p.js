@@ -40,6 +40,11 @@ export function createP2pTransport({ io }) {
       lifecycle?.stop();
     },
 
+    // V7.1 — nickname changed locally: re-advertise mDNS so peers see it.
+    announceProfile() {
+      lifecycle?.refresh();
+    },
+
     listPeers() {
       return peers.listPeers();
     },

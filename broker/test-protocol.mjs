@@ -21,7 +21,7 @@ const broker = spawn('node', ['server.js'], {
 function client() {
   const s = ioClient(URL, { reconnection: false });
   const events = [];
-  for (const ev of ['peers', 'peer:up', 'peer:down', 'deliver', 'register:denied']) {
+  for (const ev of ['peers', 'peer:up', 'peer:down', 'deliver', 'profile:update', 'register:denied']) {
     s.on(ev, (data) => events.push({ ev, data }));
   }
   return { s, events };
@@ -36,7 +36,7 @@ try {
   // --- Aurel registers (alone) ---
   const aurel = client();
   await new Promise((r) => aurel.s.on('connect', r));
-  aurel.s.emit('register', { owner: 'Aurel', instanceId: 'aurel-1' });
+  aurel.s.emit('register', { owner: 'Aurel', instanceId: 'aurel-1', nickname: 'Bureau' });
   await wait(200);
   ok(aurel.events.some((e) => e.ev === 'peers' && e.data.length === 0),
     'Aurel reçoit un roster vide (seul)');
@@ -48,6 +48,9 @@ try {
   await wait(200);
   ok(flo.events.some((e) => e.ev === 'peers' && e.data.some((p) => p.owner === 'Aurel')),
     'Flo reçoit un roster contenant Aurel');
+  ok(flo.events.some((e) => e.ev === 'peers'
+      && e.data.some((p) => p.owner === 'Aurel' && p.nickname === 'Bureau')),
+    'Le roster porte le surnom d’Aurel (« Bureau »)');
   ok(aurel.events.some((e) => e.ev === 'peer:up' && e.data.owner === 'Flo'),
     'Aurel reçoit peer:up pour Flo');
 
@@ -72,6 +75,17 @@ try {
   // --- deliver to unknown target → offline ---
   ack = await deliver(aurel.s, { owner: 'Fantome' }, 'inbox', { text: 'x' });
   ok(ack?.ok === false && ack.error === 'offline', 'deliver vers inconnu → {ok:false, offline}');
+
+  // --- profile:update (V7.1): Aurel renomme → Flo est notifié, pas Aurel ---
+  flo.events.length = 0;
+  aurel.events.length = 0;
+  aurel.s.emit('profile:update', { nickname: 'Salon' });
+  await wait(150);
+  ok(flo.events.some((e) => e.ev === 'profile:update' && e.data.owner === 'Aurel'
+      && e.data.instanceId === 'aurel-1' && e.data.nickname === 'Salon'),
+    'Flo reçoit le profile:update d’Aurel (owner immuable, surnom « Salon »)');
+  ok(!aurel.events.some((e) => e.ev === 'profile:update'),
+    'Aurel ne se reçoit pas lui-même (broadcast aux autres seulement)');
 
   // --- same-owner dedup: Flo reconnects with a new instanceId ---
   aurel.events.length = 0;

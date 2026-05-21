@@ -209,6 +209,27 @@
 
     const mainEl = document.getElementById('main');
 
+    // owner → display name (nickname || owner). History is indexed by owner
+    // (stable); names are resolved at render time so a renamed peer never
+    // rewrites the past. Built from /me (self) + /peers (others).
+    let nameMap = {};
+    function nameFor(owner) {
+      if (!owner) return owner;
+      return nameMap[owner] || owner;
+    }
+    async function loadNames() {
+      const next = {};
+      try {
+        const me = await (await fetch('/me')).json();
+        if (me.owner) next[me.owner] = me.nickname || me.owner;
+      } catch {}
+      try {
+        const peers = await (await fetch('/peers')).json();
+        for (const p of peers) if (p.owner) next[p.owner] = p.nickname || p.owner;
+      } catch {}
+      nameMap = next;
+    }
+
     const timeFmt = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false });
     const dayFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -253,9 +274,10 @@
 
     function renderMessage(msg, myOwner) {
       const time = timeFmt.format(new Date(msg.createdAt));
-      // Direction by typography: A → F means A sent to F.
-      const fromName = msg.direction === 'out' ? myOwner : msg.from;
-      const toName   = msg.direction === 'out' ? msg.to   : myOwner;
+      // Direction by typography: A → F means A sent to F. Owners resolve to
+      // their current display name (nickname || owner) at render time.
+      const fromName = nameFor(msg.direction === 'out' ? myOwner : msg.from);
+      const toName   = nameFor(msg.direction === 'out' ? msg.to   : myOwner);
       const fromTitle = fromName ?? '?';
       const toTitle   = toName ?? '?';
       const directionHtml = `<span class="direction" title="${esc(fromTitle)} → ${esc(toTitle)}">${esc(initial(fromName))}<span class="arrow">→</span>${esc(initial(toName))}</span>`;
@@ -306,6 +328,7 @@
 
     async function load() {
       try {
+        await loadNames();
         const r = await fetch('/history.json?limit=300');
         const data = await r.json();
         renderGroups(data);

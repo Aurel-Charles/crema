@@ -259,6 +259,16 @@
     </section>
 
     <section>
+      <h2>Surnom</h2>
+      <p class="hint">Le nom affiché sur les écrans, à la place de <span id="owner-name">…</span>. Laisse vide pour revenir au défaut.</p>
+      <div class="rows">
+        <div class="row">
+          <input type="text" id="nickname" maxlength="30" placeholder="Ex: Bureau" autocomplete="off" />
+        </div>
+      </div>
+    </section>
+
+    <section>
       <h2>Connexion</h2>
       <p class="hint" id="transport-line">…</p>
     </section>
@@ -295,6 +305,8 @@
     const shortcutsCardsEl = document.getElementById('shortcuts-cards');
     const shortcutAddBtn = document.getElementById('shortcut-add');
     const dndToggle = document.getElementById('dnd-toggle');
+    const nicknameInput = document.getElementById('nickname');
+    const ownerNameEl = document.getElementById('owner-name');
     const status = document.getElementById('status');
     const form = document.getElementById('form');
 
@@ -443,6 +455,21 @@
     const socket = io();
     socket.on('dnd:updated', ({ enabled }) => reflectDnd(enabled));
 
+    // ===== Profile (nickname) =====
+    async function loadProfile() {
+      try {
+        const r = await fetch('/profile');
+        const { owner, nickname } = await r.json();
+        ownerNameEl.textContent = owner || 'ce Pi';
+        // Don't clobber the field if the user is mid-edit on this device.
+        if (document.activeElement !== nicknameInput) nicknameInput.value = nickname || '';
+      } catch {}
+    }
+    // A change made elsewhere (e.g. the Pi's own screen) syncs in live.
+    socket.on('profile:updated', ({ nickname }) => {
+      if (document.activeElement !== nicknameInput) nicknameInput.value = nickname || '';
+    });
+
     // ===== Transport / broker status =====
     const transportLine = document.getElementById('transport-line');
     function renderTransport(t) {
@@ -511,7 +538,7 @@
       status.className = 'status';
 
       try {
-        const [rR, rS] = await Promise.all([
+        const [rR, rS, rP] = await Promise.all([
           fetch('/replies', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -522,12 +549,19 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(shortcutsPayload),
           }),
+          fetch('/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nickname: nicknameInput.value.trim() }),
+          }),
         ]);
-        const [savedReplies, savedShortcuts] = await Promise.all([rR.json(), rS.json()]);
+        const [savedReplies, savedShortcuts, savedProfile] = await Promise.all([rR.json(), rS.json(), rP.json()]);
         if (!rR.ok) throw new Error(savedReplies.error || 'Échec (réponses)');
         if (!rS.ok) throw new Error(savedShortcuts.error || 'Échec (raccourcis)');
+        if (!rP.ok) throw new Error(savedProfile.error || 'Échec (surnom)');
         renderReplies(savedReplies);
         renderShortcuts(savedShortcuts);
+        if (document.activeElement !== nicknameInput) nicknameInput.value = savedProfile.nickname || '';
         status.textContent = 'Enregistré';
         status.className = 'status ok';
         setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2000);
@@ -540,6 +574,7 @@
     loadAll();
     loadDnd();
     loadTransport();
+    loadProfile();
   </script>
 </body>
 </html>

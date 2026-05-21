@@ -4,6 +4,7 @@ import { isIP } from 'net';
 import {
   INSTANCE_ID, MDNS_RESOLVE_ADDRESSES, OWNER, PORT, SERVICE_NAME, SERVICE_TYPE,
 } from './config.js';
+import { getNickname } from './store.js';
 import { peerLog, errLog } from './logger.js';
 
 const HEALTH_CHECK_INTERVAL_MS = 10_000;
@@ -39,7 +40,7 @@ export async function resolveHost(host) {
 }
 
 export function listPeers() {
-  return [...peerMap.values()].map((p) => ({ instanceId: p.instanceId, owner: p.owner }));
+  return [...peerMap.values()].map((p) => ({ instanceId: p.instanceId, owner: p.owner, nickname: p.nickname }));
 }
 
 export function findPeerByInstanceId(id) {
@@ -81,6 +82,7 @@ export function init({ io }) {
     const peer = {
       instanceId: txt.instanceId,
       owner: txt.owner ?? '?',
+      nickname: txt.nickname || '',
       host,
       address,
       addresses: Array.isArray(service.addresses) ? service.addresses : [],
@@ -108,11 +110,22 @@ export function init({ io }) {
       peerLog('peer:up', `${peer.owner} apparu sur ${address}:${peer.port}`, {
         owner: peer.owner, host, address, addresses: peer.addresses, port: peer.port,
       });
-      io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner });
-    } else if (existing.address !== address) {
-      peerLog('peer:reresolved', `${peer.owner} → nouvelle IP ${address}:${peer.port}`, {
-        owner: peer.owner, host, oldAddress: existing.address, address, addresses: peer.addresses,
-      });
+      io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname });
+    } else {
+      if (existing.address !== address) {
+        peerLog('peer:reresolved', `${peer.owner} → nouvelle IP ${address}:${peer.port}`, {
+          owner: peer.owner, host, oldAddress: existing.address, address, addresses: peer.addresses,
+        });
+      }
+      // The peer re-advertised with a new nickname (V7.1 hot update over mDNS).
+      // Re-emit peer:up so front-ends upsert the new name — peer:up is an
+      // idempotent upsert keyed by instanceId.
+      if (existing.nickname !== peer.nickname) {
+        peerLog('peer:profile', `${peer.owner} → surnom « ${peer.nickname || '—'} »`, {
+          owner: peer.owner, nickname: peer.nickname,
+        });
+        io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname });
+      }
     }
   };
 
@@ -132,7 +145,9 @@ export function init({ io }) {
       PORT,
       {
         name: SERVICE_NAME,
-        txtRecord: { owner: OWNER, instanceId: INSTANCE_ID },
+        // nickname read fresh at advertise time so a re-advertise (rebirth or
+        // V7.1 refresh()) picks up the current value.
+        txtRecord: { owner: OWNER, instanceId: INSTANCE_ID, nickname: getNickname() || '' },
       },
     );
     advertisement.on('error', (err) => errLog('mdns:advertise-error', err.message));
@@ -199,11 +214,19 @@ export function init({ io }) {
     }
   }, HEALTH_CHECK_INTERVAL_MS);
 
+  // V7.1 — re-advertise immediately so peers pick up a changed nickname (or
+  // any future identity field) without waiting for the 2h rebirth. Same
+  // stop/start dance, so peers see a brief dedup then the fresh TXT record.
+  function refresh() {
+    stopMdns();
+    setTimeout(startMdns, 200);
+  }
+
   function stop() {
     clearInterval(rebirthInterval);
     clearInterval(healthInterval);
     stopMdns();
   }
 
-  return { stop };
+  return { stop, refresh };
 }

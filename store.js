@@ -1,9 +1,9 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import {
-  DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE,
+  DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE, IDENTITY_FILE,
   MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH, MAX_SHORTCUT_TEXT, MAX_ICON_LENGTH,
-  DEFAULT_REPLIES, MIN_TTL_MS, MAX_TTL_MS,
+  DEFAULT_REPLIES, MIN_TTL_MS, MAX_TTL_MS, OWNER,
 } from './config.js';
 import { sysLog } from './logger.js';
 
@@ -125,12 +125,41 @@ export function getDnd() {
   return dndEnabled;
 }
 
+// ===== Display nickname (V7.1) =====
+//
+// A presentation label propagated on top of `owner`. `owner` remains the
+// immutable routing identity (broker registry key, mDNS dedup, history index);
+// the nickname only ever changes how a Pi is *shown*. Effective name shown to
+// users = nickname || owner. Empty-after-trim = not set.
+
+let nickname = '';
+
+export function sanitizeNickname(input) {
+  const s = typeof input === 'string' ? input.trim() : '';
+  return s.length > MAX_LABEL_LENGTH ? s.slice(0, MAX_LABEL_LENGTH) : s;
+}
+
+async function loadIdentity() {
+  try {
+    const raw = await readFile(IDENTITY_FILE, 'utf8');
+    nickname = sanitizeNickname(JSON.parse(raw)?.nickname);
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('[identity] load failed:', err.message);
+    nickname = '';
+  }
+}
+
+export function getNickname() {
+  return nickname;
+}
+
 // ===== Init =====
 
-export async function init({ app, io }) {
+export async function init({ app, io, transport }) {
   await loadReplies();
   await loadShortcuts();
   await loadDnd();
+  await loadIdentity();
 
   app.get('/replies', (req, res) => res.json(replies));
   app.put('/replies', async (req, res) => {
@@ -169,5 +198,27 @@ export async function init({ app, io }) {
     io.emit('dnd:updated', { enabled: dndEnabled });
     sysLog(dndEnabled ? 'dnd:on' : 'dnd:off', dndEnabled ? 'Mode Ne Pas Déranger activé' : 'Mode Ne Pas Déranger désactivé');
     res.json({ enabled: dndEnabled });
+  });
+
+  // Profile: the display nickname. owner is always returned alongside so the
+  // front-ends can render `nickname || owner` without a second request.
+  app.get('/profile', (req, res) => res.json({ owner: OWNER, nickname }));
+  app.put('/profile', async (req, res) => {
+    const next = sanitizeNickname(req.body?.nickname);
+    if (next === nickname) return res.json({ owner: OWNER, nickname });
+    nickname = next;
+    try {
+      await persistAtomic(IDENTITY_FILE, { nickname });
+    } catch (err) {
+      console.error('[identity] persist failed:', err.message);
+    }
+    // Local front-ends (settings ↔ display) sync live, like dnd:updated.
+    io.emit('profile:updated', { owner: OWNER, nickname });
+    // Push the new name to peers over whatever transport(s) are live (mDNS
+    // re-advertise + broker profile:update). No-op if the transport predates
+    // this method (defensive).
+    transport?.announceProfile?.();
+    sysLog('profile:update', nickname ? `Surnom défini : « ${nickname} »` : 'Surnom retiré', { owner: OWNER, nickname });
+    res.json({ owner: OWNER, nickname });
   });
 }
