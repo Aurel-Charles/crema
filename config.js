@@ -16,13 +16,24 @@ export const OWNER = process.env.CREMA_OWNER ?? deriveOwnerFromHostname();
 export const INSTANCE_ID = randomUUID();
 
 // Transport selection — see docs/broker-protocol.md.
-//   p2p    : mDNS discovery + direct Pi-to-Pi HTTP (default, current behaviour)
-//   broker : Socket.IO client to a LAN broker (not implemented yet)
-export const TRANSPORT = process.env.CREMA_TRANSPORT === 'broker' ? 'broker' : 'p2p';
-export const BROKER_URL = process.env.CREMA_BROKER_URL ?? 'ws://localhost:4000';
+//   dual   : broker primary + p2p fallback, both live at once (default)
+//   p2p    : mDNS discovery + direct Pi-to-Pi HTTP only (broker disabled)
+//   broker : Socket.IO client to a LAN broker only (no mDNS)
+const _t = process.env.CREMA_TRANSPORT;
+export const TRANSPORT = (_t === 'p2p' || _t === 'broker') ? _t : 'dual';
+
+// Broker URL. null = let dual mode auto-discover the broker over mDNS
+// (_crema-broker._tcp). Set it explicitly (e.g. a DHCP-reserved static IP) to
+// pin the primary path and skip discovery entirely — the robust choice.
+// Pure broker mode falls back to localhost for Mac testing.
+export const BROKER_URL = process.env.CREMA_BROKER_URL ?? null;
+export const BROKER_URL_DEFAULT = 'ws://localhost:4000';
 export const BROKER_TOKEN = process.env.CREMA_BROKER_TOKEN ?? null;
 
+// mDNS service types: peers announce `_crema._tcp`, the broker announces
+// `_crema-broker._tcp` so a Pi's peer browser never mistakes the broker for a peer.
 export const SERVICE_TYPE = 'crema';
+export const BROKER_SERVICE_TYPE = 'crema-broker';
 export const SERVICE_NAME = `crema-${OWNER}-${INSTANCE_ID.slice(0, 8)}`;
 
 // Amiens — used to compute sunrise/sunset for the day/night theme.

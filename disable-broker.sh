@@ -1,17 +1,22 @@
 #!/bin/bash
-# Revert this Pi's Crema server to P2P (mDNS) transport by removing the
-# broker drop-in installed by ./enable-broker.sh.
+# Force this Pi to PURE P2P transport — broker disabled entirely (mDNS only).
+# Use when you want to take the broker out of the loop (debug, broker down for
+# maintenance). Lays a systemd drop-in with CREMA_TRANSPORT=p2p.
+#
+# Back to the default dual (broker + p2p): ./reset-transport.sh
 set -euo pipefail
 
-DROPIN=/etc/systemd/system/crema.service.d/transport.conf
-if [ -f "$DROPIN" ]; then
-  echo "▸ Removing $DROPIN"
-  sudo rm -f "$DROPIN"
-  # Drop the dir too if now empty, to keep things tidy.
-  sudo rmdir /etc/systemd/system/crema.service.d 2>/dev/null || true
-  sudo systemctl daemon-reload
-  sudo systemctl restart crema.service
-  echo "✓ Crema reverted to P2P (mDNS) mode."
-else
-  echo "Already in P2P mode (no broker drop-in found)."
-fi
+DROPIN_DIR=/etc/systemd/system/crema.service.d
+echo "▸ Writing $DROPIN_DIR/transport.conf (force p2p)"
+sudo mkdir -p "$DROPIN_DIR"
+{
+  echo "[Service]"
+  echo "Environment=CREMA_TRANSPORT=p2p"
+} | sudo tee "$DROPIN_DIR/transport.conf" > /dev/null
+
+sudo systemctl daemon-reload
+sudo systemctl restart crema.service
+
+echo "✓ Crema forced to PURE P2P (mDNS) — broker disabled."
+echo "  Back to default dual: ./reset-transport.sh"
+echo "  Logs:                 sudo journalctl -u crema -f"

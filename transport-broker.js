@@ -1,5 +1,5 @@
 import { io as ioClient } from 'socket.io-client';
-import { OWNER, INSTANCE_ID, BROKER_URL, BROKER_TOKEN } from './config.js';
+import { OWNER, INSTANCE_ID, BROKER_URL, BROKER_URL_DEFAULT, BROKER_TOKEN } from './config.js';
 import { peerLog, errLog } from './logger.js';
 
 // Broker transport: a Socket.IO *client* to the LAN broker. Implements the same
@@ -9,10 +9,17 @@ import { peerLog, errLog } from './logger.js';
 // Presence is mirrored into the Pi's *local* io (the one its PWA/display
 // connect to) as the very same peer:up / peer:down events that peers.js emits
 // in P2P mode, so the front-ends behave identically.
-export function createBrokerTransport({ io }) {
+export function createBrokerTransport({ io, onStatus = () => {} }) {
   let socket = null;
   let deliverHandler = () => {};
   let peers = []; // [{ owner, instanceId }]
+  let connected = false;
+
+  function setConnected(next) {
+    if (next === connected) return;
+    connected = next;
+    onStatus(connected ? 'connected' : 'down');
+  }
 
   function findPeer({ owner, instanceId } = {}) {
     if (instanceId) return peers.find((p) => p.instanceId === instanceId) ?? null;
@@ -21,8 +28,12 @@ export function createBrokerTransport({ io }) {
   }
 
   return {
-    init() {
-      socket = ioClient(BROKER_URL, { reconnection: true, reconnectionDelayMax: 5000 });
+    isConnected: () => connected,
+
+    health: () => ({ mode: 'broker', broker: connected ? 'connected' : 'down' }),
+
+    init(url = BROKER_URL ?? BROKER_URL_DEFAULT) {
+      socket = ioClient(url, { reconnection: true, reconnectionDelayMax: 5000 });
 
       socket.on('connect', () => {
         socket.emit('register', {
@@ -30,7 +41,8 @@ export function createBrokerTransport({ io }) {
           instanceId: INSTANCE_ID,
           token: BROKER_TOKEN ?? undefined,
         });
-        peerLog('broker:connected', `Connecté au broker ${BROKER_URL}`, { url: BROKER_URL });
+        setConnected(true);
+        peerLog('broker:connected', `Connecté au broker ${url}`, { url });
       });
 
       // Full roster on (re)register — replace local view and announce each to
@@ -73,6 +85,7 @@ export function createBrokerTransport({ io }) {
         // Lost the broker → we can no longer see anyone. Clear and tell the UI.
         const gone = peers;
         peers = [];
+        setConnected(false);
         for (const p of gone) io.emit('peer:down', { instanceId: p.instanceId });
         peerLog('broker:disconnected', `Déconnecté du broker (${reason})`, { reason }, 'warn');
       });
@@ -82,6 +95,7 @@ export function createBrokerTransport({ io }) {
       try { socket?.disconnect(); } catch {}
       socket = null;
       peers = [];
+      setConnected(false);
     },
 
     listPeers() {

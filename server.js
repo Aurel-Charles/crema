@@ -30,7 +30,7 @@ app.get('/history', (req, res) => res.sendFile(join(PUBLIC_DIR, 'history.html'))
 app.get('/logs', (req, res) => res.sendFile(join(PUBLIC_DIR, 'logs.html')));
 
 app.get('/me', (req, res) => {
-  res.json({ owner: OWNER, instanceId: INSTANCE_ID });
+  res.json({ owner: OWNER, instanceId: INSTANCE_ID, transport: transport.health() });
 });
 
 app.get('/peers', (req, res) => {
@@ -71,6 +71,7 @@ app.post('/logs/cleanup', (req, res) => {
 
 io.on('connection', (socket) => {
   socket.emit('peers:init', transport.listPeers());
+  socket.emit('transport:health', transport.health());
 });
 
 db.init();

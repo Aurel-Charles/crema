@@ -64,5 +64,10 @@ echo "  • Status : sudo systemctl status crema-broker"
 echo "  • Logs   : sudo journalctl -u crema-broker -f"
 echo "  • Health : curl http://localhost:$PORT/health"
 echo
-echo "  Point each Pi at this server:"
-echo "    ./enable-broker.sh ws://$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT${CREMA_BROKER_TOKEN:+ $CREMA_BROKER_TOKEN}"
+echo "  Pis on the default (dual) transport auto-discover this broker over mDNS"
+echo "  — nothing to run on them. For that, this box needs the optional 'mdns'"
+echo "  native module (apt install libavahi-compat-libdev, then re-run npm install"
+echo "  here); the broker relays fine without it (auto-discovery just off)."
+echo
+echo "  To pin the broker on a Pi instead of relying on discovery (robust):"
+echo "    ./pin-broker.sh ws://$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT${CREMA_BROKER_TOKEN:+ $CREMA_BROKER_TOKEN}"

@@ -1,8 +1,10 @@
 #!/bin/bash
-# Switch this Pi's Crema server to BROKER transport via a systemd drop-in.
-# The base crema.service is left untouched; this only layers env on top, so
-# reverting is just ./disable-broker.sh.
+# Force this Pi to PURE BROKER transport — mDNS/p2p disabled entirely. The Pi
+# talks only through the relay. Mostly a debug/diagnostic switch now that the
+# default (dual) already uses the broker as primary with p2p fallback; for
+# normal use prefer ./pin-broker.sh (keeps the fallback) or auto-discovery.
 #
+# The base crema.service is untouched; revert with ./reset-transport.sh.
 # Usage: ./enable-broker.sh ws://<broker-host>:4000 [token]
 set -euo pipefail
 
@@ -14,7 +16,7 @@ if [ -z "$URL" ]; then
 fi
 
 DROPIN_DIR=/etc/systemd/system/crema.service.d
-echo "▸ Writing $DROPIN_DIR/transport.conf (broker → $URL)"
+echo "▸ Writing $DROPIN_DIR/transport.conf (PURE broker → $URL)"
 sudo mkdir -p "$DROPIN_DIR"
 {
   echo "[Service]"
@@ -26,6 +28,7 @@ sudo mkdir -p "$DROPIN_DIR"
 sudo systemctl daemon-reload
 sudo systemctl restart crema.service
 
-echo "✓ Crema is now in BROKER mode → $URL"
-echo "  Revert to P2P: ./disable-broker.sh"
-echo "  Logs:          sudo journalctl -u crema -f"
+echo "✓ Crema in PURE BROKER mode → $URL (no p2p fallback)"
+echo "  For broker + p2p fallback instead: ./pin-broker.sh $URL"
+echo "  Back to default dual:              ./reset-transport.sh"
+echo "  Logs:                              sudo journalctl -u crema -f"
