@@ -64,11 +64,13 @@ export function createP2pTransport({ io }) {
         await post(peer.address, peer.port, path, payload);
         return { ok: true };
       } catch (err1) {
-        // Single re-resolve retry: the peer's .local IP may have changed
-        // since discovery (DHCP lease, Wi-Fi reconnect).
+        // Single re-resolve retry: the peer's IP may have changed since
+        // discovery (DHCP lease, Wi-Fi reconnect). Do not replace a numeric
+        // mDNS-provided address with a .local hostname if DNS lookup fails.
         msgLog('msg:send-retry', `Renvoi → ${peer.owner} (${err1.message})`, { to: peer.owner }, 'warn');
         try {
           const fresh = await peers.resolveHost(peer.host);
+          if (!fresh || fresh === peer.address) throw err1;
           peer.address = fresh;
           await post(fresh, peer.port, path, payload);
           return { ok: true };
