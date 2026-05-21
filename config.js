@@ -15,13 +15,21 @@ export const PORT = Number(process.env.PORT ?? 3000);
 export const OWNER = process.env.CREMA_OWNER ?? deriveOwnerFromHostname();
 export const INSTANCE_ID = randomUUID();
 export const EMBED_BROKER = process.env.CREMA_EMBED_BROKER === '1';
+export const ALLOW_P2P_IN_EMBEDDED_BROKER = process.env.CREMA_ALLOW_P2P_IN_EMBEDDED_BROKER === '1';
+export const MDNS_RESOLVE_ADDRESSES = process.env.CREMA_MDNS_RESOLVE_ADDRESSES !== '0';
 
 // Transport selection — see docs/broker-protocol.md.
 //   dual   : broker primary + p2p fallback, both live at once (default)
 //   p2p    : mDNS discovery + direct Pi-to-Pi HTTP only (broker disabled)
 //   broker : Socket.IO client to a LAN broker only (no mDNS)
 const _t = process.env.CREMA_TRANSPORT;
-export const TRANSPORT = (_t === 'p2p' || _t === 'broker') ? _t : 'dual';
+function selectTransport(value) {
+  if (EMBED_BROKER && !ALLOW_P2P_IN_EMBEDDED_BROKER) return 'broker';
+  if (value === 'p2p' || value === 'broker') return value;
+  return 'dual';
+}
+
+export const TRANSPORT = selectTransport(_t);
 
 // Broker URL. null = let dual mode auto-discover the broker over mDNS
 // (_crema-broker._tcp). Set it explicitly (e.g. a DHCP-reserved static IP) to

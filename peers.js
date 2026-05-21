@@ -1,7 +1,8 @@
 import mdns from 'mdns';
 import { lookup as dnsLookup } from 'dns/promises';
+import { isIP } from 'net';
 import {
-  INSTANCE_ID, OWNER, PORT, SERVICE_NAME, SERVICE_TYPE,
+  INSTANCE_ID, MDNS_RESOLVE_ADDRESSES, OWNER, PORT, SERVICE_NAME, SERVICE_TYPE,
 } from './config.js';
 import { getNickname } from './store.js';
 import { peerLog, errLog } from './logger.js';
@@ -24,12 +25,17 @@ function pickHost(service) {
   return service.host?.replace(/\.$/, '') ?? null;
 }
 
+function pickAddress(service) {
+  const addresses = Array.isArray(service.addresses) ? service.addresses : [];
+  return addresses.find((address) => isIP(address) === 4) ?? null;
+}
+
 export async function resolveHost(host) {
   try {
     const { address } = await dnsLookup(host, { family: 4 });
     return address;
   } catch {
-    return host;
+    return null;
   }
 }
 
@@ -72,13 +78,14 @@ export function init({ io }) {
     if (txt.instanceId === INSTANCE_ID) return;
     const host = pickHost(service);
     if (!host) return;
-    const address = await resolveHost(host);
+    const address = pickAddress(service) ?? await resolveHost(host) ?? host;
     const peer = {
       instanceId: txt.instanceId,
       owner: txt.owner ?? '?',
       nickname: txt.nickname || '',
       host,
       address,
+      addresses: Array.isArray(service.addresses) ? service.addresses : [],
       port: service.port,
     };
 
@@ -101,13 +108,13 @@ export function init({ io }) {
     peerFailures.set(service.name, 0);
     if (!existing) {
       peerLog('peer:up', `${peer.owner} apparu sur ${address}:${peer.port}`, {
-        owner: peer.owner, address, port: peer.port,
+        owner: peer.owner, host, address, addresses: peer.addresses, port: peer.port,
       });
       io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname });
     } else {
       if (existing.address !== address) {
         peerLog('peer:reresolved', `${peer.owner} → nouvelle IP ${address}:${peer.port}`, {
-          owner: peer.owner, oldAddress: existing.address, address,
+          owner: peer.owner, host, oldAddress: existing.address, address, addresses: peer.addresses,
         });
       }
       // The peer re-advertised with a new nickname (V7.1 hot update over mDNS).
@@ -146,11 +153,16 @@ export function init({ io }) {
     advertisement.on('error', (err) => errLog('mdns:advertise-error', err.message));
     advertisement.start();
 
-    // mdns 2.7.2's getaddrinfo step crashes on Node 18+ (deprecated internal API).
-    // Stop the resolver after DNSServiceResolve — we use the .local hostname directly,
-    // letting the OS resolver (avahi via NSS) handle name-to-IP at fetch time.
+    const resolverSequence = MDNS_RESOLVE_ADDRESSES
+      ? [
+          mdns.rst.DNSServiceResolve(),
+          mdns.rst.DNSServiceGetAddrInfo({ families: [4] }),
+          mdns.rst.makeAddressesUnique(),
+        ]
+      : [mdns.rst.DNSServiceResolve()];
+
     browser = mdns.createBrowser(mdns.tcp(SERVICE_TYPE), {
-      resolverSequence: [mdns.rst.DNSServiceResolve()],
+      resolverSequence,
     });
     browser.on('serviceUp', onServiceUp);
     browser.on('serviceDown', onServiceDown);
