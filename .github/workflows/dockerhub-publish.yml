@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  DOCKERHUB_USERNAME: Lowess
+  DOCKERHUB_USERNAME: lowess
   IMAGE_NAME: lowess/crema
 
 jobs:

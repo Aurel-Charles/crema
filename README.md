@@ -287,7 +287,7 @@ minutes.
 Pushing to `main`, pushing a `v*` tag, or manually running the
 `Publish Docker image` GitHub Actions workflow builds and publishes
 `lowess/crema` to Docker Hub for `linux/amd64` and `linux/arm64`.
-The workflow logs in as Docker Hub user `Lowess` and expects a repository
+The workflow logs in as Docker Hub user `lowess` and expects a repository
 secret named `DOCKERHUB_TOKEN`.
 
 To reload the display without rebooting (kiosk has an auto-restart loop):
