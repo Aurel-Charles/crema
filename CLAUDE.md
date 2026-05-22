@@ -136,7 +136,7 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 
 - ✅ **V0** — MVP mono-Pi, message s'affiche 30s, idle statique `Prêt`
 - ✅ **V1** — Second Pi + découverte mDNS automatique + sélection destinataire dans la PWA
-- ✅ **V2** — Idle state propre : horloge + veilleuse jour/nuit + présence du Pi distant ("Flo en ligne")
+- ✅ **V2** — Idle state propre : horloge + veilleuse jour/nuit + présence du Pi distant ("Slibar en ligne")
 - ✅ **V3** — Réponses rapides par défaut (boutons tactiles configurables, dispos sur tout message reçu)
 - ✅ **V4** — Options de réponse personnalisées à l'envoi + TTL avec smart defaults + mini barre de progression d'expiration
 - ✅ **V5** — Raccourcis d'envoi sur l'écran tactile, créés/édités depuis la PWA
@@ -156,9 +156,9 @@ Symétrique pair-à-pair : **code identique sur chaque Pi**. Chaque Pi expose sa
 
 ## Identité et destinataire
 
-- Chaque Pi a un propriétaire (`pi-aurel` = Aurel, `pi-flo` = Flo). Tout message qui sort d'un Pi est signé par son propriétaire.
+- Chaque Pi a un propriétaire (`pi-aurel` = Aurel, `pi-slibar` = Slibar). Tout message qui sort d'un Pi est signé par son propriétaire.
 - Les réponses atterrissent **sur le Pi de l'émetteur** (l'écran = réceptacle principal, la PWA = juste l'émetteur).
-- Naming des Pi peut inclure la pièce ("Flo (salon)") quand il y aura plus d'un Pi par personne.
+- Naming des Pi peut inclure la pièce ("Slibar (salon)") quand il y aura plus d'un Pi par personne.
 
 ## Trois types d'interactions préréglées (objets distincts dans le data model)
 
@@ -179,7 +179,7 @@ Smart defaults selon le type de message :
 
 Modifiable à l'envoi via presets : `30s` / `5min` / `1h` / `Ce soir` / `Personnalisé…`
 
-Affichage côté receveur : `Flo · il y a 12s · encore 58min` en sous-titre, mini barre de progression discrète tout en bas du message.
+Affichage côté receveur : `Slibar · il y a 12s · encore 58min` en sous-titre, mini barre de progression discrète tout en bas du message.
 
 ## Modèle de données (préview)
 
@@ -211,7 +211,7 @@ Light theme, surfaces blanches, contrôles modernes standards. Composition : hea
 
 ## Mockups visuels (déjà conçus pour V2+)
 
-1. **Pi au repos** — fond chaud sombre, grosse horloge amber, date, météo en haut-gauche, présence "Flo en ligne" en haut-droite, rangée de 4 raccourcis avec icônes Tabler + bouton "+" pour en créer.
+1. **Pi au repos** — fond chaud sombre, grosse horloge amber, date, météo en haut-gauche, présence "Slibar en ligne" en haut-droite, rangée de 4 raccourcis avec icônes Tabler + bouton "+" pour en créer.
 2. **Pi reçoit un message simple** — indicateur "Nouveau message" en haut-gauche, sender en uppercase, "il y a Xs" en sous-titre, message en grand, rangée discrète de réponses par défaut en bas-droite.
 3. **Pi reçoit un message avec options de réponse** — idem mais 3 gros boutons primaires (`Oui` / `Non` / `À voir`) à la place des réponses par défaut.
 4. **PWA mobile** — header destinataire, champ texte, options de réponse en chips, raccourcis enregistrés en grille, bouton "Envoyer".
