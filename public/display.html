@@ -859,6 +859,10 @@
     // ===== State =====
     let mode = 'idle';
     let resetTimer = null;
+    // True while THIS screen is handling its own reply tap (between the tap and
+    // the return to idle). Lets the msg:answered signal ignore our own reply —
+    // we already show the ✓ and exit animation; only PWA-sent replies dismiss us.
+    let selfReplying = false;
     let notifTimer = null;
     let currentMsg = null;
     let replies = [];
@@ -925,6 +929,7 @@
     function showIdle() {
       mode = 'idle';
       currentMsg = null;
+      selfReplying = false;
       if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
       renderIdle();
       renderShortcuts();
@@ -1332,6 +1337,7 @@
 
       const allBtns = screen.querySelectorAll('.reply-btn');
       for (const b of allBtns) b.disabled = true;
+      selfReplying = true;  // ignore the msg:answered echo of our own reply
 
       try {
         const r = await fetch('/reply', {
@@ -1350,6 +1356,7 @@
         // Return to idle via the mirror exit animation after a brief beat.
         resetTimer = setTimeout(leaveMessage, REPLY_RETURN_DELAY_MS);
       } catch {
+        selfReplying = false;  // failed → an external answer may still dismiss
         btn.classList.add('failed');
         btn.textContent = '✕ ' + reply.label;
         setTimeout(() => {
@@ -1618,6 +1625,20 @@
 
     socket.on('msg:expired', ({ text, targetOwner }) => {
       showNotif(`« ${truncate(text, 40)} » sans réponse de ${targetOwner}`);
+    });
+
+    // A reply was sent from one of our own clients (typically the PWA) → the
+    // original message is answered. Dismiss it if it's on screen; otherwise drop
+    // it from the queue. Replies tapped on this screen set selfReplying and are
+    // ignored (they run their own ✓ + exit).
+    socket.on('msg:answered', ({ replyToMsgId } = {}) => {
+      if (!replyToMsgId || selfReplying) return;
+      if (mode === 'message' && currentMsg?.id === replyToMsgId) {
+        leaveMessage();
+        return;
+      }
+      const i = messageQueue.findIndex((m) => m && m.id === replyToMsgId);
+      if (i !== -1) { messageQueue.splice(i, 1); updateMsgStat(); }
     });
 
     socket.on('dnd:updated', ({ enabled }) => {

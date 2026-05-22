@@ -275,6 +275,11 @@ export function init({ app, io, transport }) {
       status: 'sent',
     });
     io.emit('history:new');
+    // Tell our own clients the original message is now answered. The display
+    // dismisses it if it's still on screen (or drops it from its queue) — this
+    // is what makes a reply sent from the PWA clear the screen. A reply tapped
+    // on the screen itself runs its own ✓/exit and ignores this signal.
+    if (replyToMsgId) io.emit('msg:answered', { replyToMsgId });
     msgLog('msg:reply-sent', `↩ → ${peer.owner} : ${trunc(label)}`, { to: peer.owner, replyToMsgId });
     return res.json({ ok: true });
   });
