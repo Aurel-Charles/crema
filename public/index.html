@@ -610,6 +610,147 @@
     }
     .recap-more:active { color: var(--crema-accent-deep); }
 
+    /* "répondre" — pill mono à droite de la méta, écho du recap-more. Grisé +
+     * "hors ligne" quand l'émetteur n'est pas joignable. */
+    .recap-reply {
+      margin-left: auto;
+      padding: 4px 12px;
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
+      font-size: 9.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--crema-accent-deep);
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .recap-reply:active { background: var(--crema-stroke-faint); border-color: var(--crema-accent); }
+    .recap-reply:disabled { color: var(--crema-muted); cursor: default; }
+
+    /* ===== Reply sheet — bottom-sheet pour répondre à un message reçu sans
+     * quitter la home. Backdrop assombri + feuille qui remonte. Réutilise les
+     * tokens du thème ; le liseré arc-en-ciel en tête est la signature partagée. */
+    .sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 12, 8, 0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 50;
+    }
+    .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+    .sheet {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      z-index: 51;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 22px 20px calc(20px + env(safe-area-inset-bottom));
+      background: var(--crema-bg-gradient);
+      border-top-left-radius: 22px;
+      border-top-right-radius: 22px;
+      box-shadow: 0 -12px 40px -12px rgba(40, 20, 10, 0.5);
+      transform: translateY(100%);
+      transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+    .sheet.open { transform: translateY(0); }
+    .sheet::before {
+      content: "";
+      position: absolute;
+      left: 20px; right: 20px; top: 9px;
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg,
+        var(--band-1), var(--band-2), var(--band-3), var(--band-4),
+        var(--band-5), var(--band-6), var(--band-7));
+      opacity: 0.8;
+    }
+    .sheet-head { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+    .sheet-label {
+      font-family: var(--crema-font-mono);
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--crema-muted);
+    }
+    .sheet-quote {
+      font-family: var(--crema-font-serif);
+      font-size: 21px;
+      line-height: 1.3;
+      color: var(--crema-text);
+      overflow-wrap: anywhere;
+    }
+    .sheet-quote .who {
+      font-family: var(--crema-font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--crema-accent-deep);
+      text-transform: uppercase;
+      margin-right: 7px;
+    }
+    .sheet-replies { display: flex; flex-wrap: wrap; gap: 8px; }
+    .sheet-reply {
+      padding: 11px 16px;
+      font-family: inherit;
+      font-size: 16px;
+      color: var(--crema-text);
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.05s;
+    }
+    .sheet-reply:active { transform: scale(0.97); border-color: var(--crema-accent); }
+    .sheet-reply.sent { background: var(--crema-attention); border-color: var(--crema-accent); color: var(--crema-accent-ink); font-weight: 600; }
+    .sheet-reply:disabled { opacity: 0.5; cursor: default; }
+    .sheet-free { display: flex; gap: 8px; align-items: flex-end; }
+    .sheet-free textarea {
+      flex: 1;
+      min-height: 48px;
+      max-height: 140px;
+      padding: 13px 14px;
+      font-family: inherit;
+      font-size: 16px;
+      line-height: 1.3;
+      border: 1px solid var(--crema-stroke);
+      border-radius: 14px;
+      background: var(--crema-surface);
+      color: inherit;
+      outline: none;
+      resize: none;
+    }
+    .sheet-free textarea:focus {
+      border-color: var(--crema-accent);
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.2);
+    }
+    .sheet-send {
+      flex-shrink: 0;
+      padding: 13px 18px;
+      font-family: var(--crema-font-serif);
+      font-style: italic;
+      font-size: 18px;
+      text-transform: lowercase;
+      color: #FFFFFF;
+      background: linear-gradient(90deg, var(--band-1) 0%, var(--band-7) 50%, var(--band-6) 100%);
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.05s;
+    }
+    .sheet-send:active { transform: scale(0.97); }
+    .sheet-send:disabled { opacity: 0.4; cursor: not-allowed; }
+    .sheet-status { min-height: 18px; font-size: 13px; text-align: center; color: var(--crema-muted); }
+    .sheet-status.err { color: var(--crema-danger); }
+
     /* ===== Responsive — placé EN FIN de feuille pour gagner en ordre de
      * cascade sur les règles de base (form/header) de même spécificité. ===== */
 
@@ -775,6 +916,21 @@
   </form>
   </div>
 
+  <!-- Reply sheet (bottom-sheet) — réponse rapide à un message reçu -->
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Répondre" aria-hidden="true">
+    <div class="sheet-head">
+      <span class="sheet-label">↩ répondre à</span>
+      <div class="sheet-quote" id="sheet-quote"></div>
+    </div>
+    <div class="sheet-replies" id="sheet-replies"></div>
+    <div class="sheet-free">
+      <textarea id="sheet-text" placeholder="réponse libre…" maxlength="120" rows="1"></textarea>
+      <button type="button" class="sheet-send" id="sheet-send">envoyer</button>
+    </div>
+    <div class="sheet-status" id="sheet-status"></div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
@@ -814,6 +970,14 @@
     // owner → display name (nickname || owner). Fed by loadMe()/loadPeers() so
     // the récap can resolve sender initials without its own /me|/peers fetches.
     const nameMap = {};
+    // owner → instanceId, rebuilt each loadPeers(). The récap knows a message's
+    // sender by owner, but /reply routes by instanceId; this resolves one to the
+    // other. An absent entry = that peer is offline → reply is disabled.
+    const peerIdByOwner = {};
+    // This Pi's default quick replies, mirrored from /replies (the same source
+    // the screen uses). Offered in the reply sheet when a received message
+    // carries no custom response options of its own.
+    let defaultReplies = [];
 
     const MAX_CHARS = 120;
 
@@ -1113,7 +1277,15 @@
       try {
         const r = await fetch('/peers');
         peers = await r.json();
-        for (const p of peers) if (p.owner) nameMap[p.owner] = p.nickname || p.owner;
+        // Rebuild owner→instanceId each poll so a peer going offline is
+        // reflected (its entry vanishes → its reply button disables). nameMap is
+        // never cleared: names persist so the récap can resolve past senders.
+        for (const k of Object.keys(peerIdByOwner)) delete peerIdByOwner[k];
+        for (const p of peers) {
+          if (!p.owner) continue;
+          nameMap[p.owner] = p.nickname || p.owner;
+          peerIdByOwner[p.owner] = p.instanceId;
+        }
         const prev = targetSel.value;
 
         // Le <select> reste la source de vérité (toujours masqué). L'UI
@@ -1183,11 +1355,24 @@
             status: 'replied',
           });
         } else {
+          // expiresAt is stored as epoch-ms (or null), like createdAt. An
+          // incoming message's expiry isn't a DB status (the TTL timer only runs
+          // sender-side on outgoing) so we derive it here against the clock.
+          const expired = m.expiresAt ? m.expiresAt < Date.now() : false;
           out.push({
             question: { text: m.text, sender: m.direction === 'out' ? myOwner : m.from },
             answer: null,
             time: m.createdAt,
             status: m.status,
+            // Reply-affordance metadata — only meaningful for a standalone
+            // incoming message (one the peer sent us, still unanswered). See
+            // renderExchange / openSheet.
+            direction: m.direction,
+            isReply: m.isReply,
+            msgId: m.id,
+            fromOwner: m.from,
+            responseOptions: m.responseOptions || null,
+            expired,
           });
         }
       }
@@ -1210,17 +1395,38 @@
       const aLine = ex.answer
         ? `<div class="recap-line a"><span class="who">${escapeHtml(recapInitial(ex.answer.sender))}</span><span class="txt">${escapeHtml(ex.answer.text)}</span></div>`
         : '';
-      // A paired card already shows the answer → the "répondu" badge would be
-      // redundant. Keep the badge only for standalone (still-open) messages.
-      const badge = ex.answer ? '' : recapBadge(ex.status);
-      const cls = ex.status === 'expired' ? ' expired' : '';
-      return `<div class="recap-card${cls}">${qLine}${aLine}<div class="recap-meta"><span class="time">${time}</span>${badge}</div></div>`;
+      // A standalone incoming message is one the peer sent us that we can still
+      // answer from here. Once answered it becomes a paired card (no button).
+      const incomingOpen = !ex.answer && ex.direction === 'in' && !ex.isReply;
+      const expired = incomingOpen && ex.expired;
+      // Badge: paired cards already show the answer (none); an expired incoming
+      // gets a forced "expiré"; others keep their status badge.
+      let badge;
+      if (ex.answer) badge = '';
+      else if (expired) badge = '<span class="recap-badge neutral">expiré</span>';
+      else badge = recapBadge(ex.status);
+      // Reply button only on a live (non-expired) incoming message. Disabled
+      // with a hint when the sender is offline — /reply needs them reachable.
+      let replyBtn = '';
+      if (incomingOpen && !expired) {
+        replyBtn = peerIdByOwner[ex.fromOwner]
+          ? `<button type="button" class="recap-reply" data-msg-id="${escapeHtml(ex.msgId)}">répondre</button>`
+          : `<button type="button" class="recap-reply" disabled>hors ligne</button>`;
+      }
+      const cls = (expired || ex.status === 'expired') ? ' expired' : '';
+      return `<div class="recap-card${cls}">${qLine}${aLine}<div class="recap-meta"><span class="time">${time}</span>${badge}${replyBtn}</div></div>`;
     }
 
+    // Last-rendered exchanges, kept so a reply button can find its card by id.
+    let recapExchanges = [];
     function renderRecap(exchanges) {
-      if (!exchanges.length) { recapEl.hidden = true; return; }
-      recapList.innerHTML = exchanges.map(renderExchange).join('');
-      recapEl.hidden = false;
+      recapExchanges = exchanges;
+      if (!exchanges.length) { recapEl.hidden = true; }
+      else {
+        recapList.innerHTML = exchanges.map(renderExchange).join('');
+        recapEl.hidden = false;
+      }
+      closeSheetIfBoundGone();  // bound message answered elsewhere → close
     }
 
     async function loadRecap() {
@@ -1234,6 +1440,16 @@
       }
     }
 
+    // This Pi's default quick replies — same source the screen reads. Used as
+    // the sheet's reply options when a message has no custom ones of its own.
+    async function loadDefaultReplies() {
+      try {
+        const list = await (await fetch('/replies')).json();
+        if (Array.isArray(list)) defaultReplies = list;
+      } catch { /* keep prior list; the sheet still offers free text */ }
+    }
+    socket.on('replies:updated', (list) => { if (Array.isArray(list)) defaultReplies = list; });
+
     // Debounced refetch — a burst of inserts / status pings fires one reload.
     let recapTimer = null;
     function scheduleRecapRefetch() {
@@ -1242,6 +1458,124 @@
     }
     socket.on('history:new', scheduleRecapRefetch);
     socket.on('msg:status', scheduleRecapRefetch);
+
+    // ===== Reply sheet =====
+    // The recap card currently being replied to (null = sheet closed).
+    let replyCard = null;
+    const sheet = document.getElementById('sheet');
+    const sheetBackdrop = document.getElementById('sheet-backdrop');
+    const sheetQuote = document.getElementById('sheet-quote');
+    const sheetReplies = document.getElementById('sheet-replies');
+    const sheetText = document.getElementById('sheet-text');
+    const sheetSend = document.getElementById('sheet-send');
+    const sheetStatus = document.getElementById('sheet-status');
+
+    // Mirror the screen's fallback (display.html:activeReplyItems): the message's
+    // own custom options, else this Pi's default quick replies. Normalised to
+    // plain label strings.
+    function sheetReplyItems(ex) {
+      const opts = ex.responseOptions;
+      const src = (opts && opts.length > 0) ? opts : defaultReplies;
+      return src.map((o) => (typeof o === 'string' ? o : o?.label)).filter(Boolean);
+    }
+
+    function openSheet(ex) {
+      replyCard = ex;
+      sheetQuote.innerHTML =
+        `<span class="who">${escapeHtml(recapNameFor(ex.fromOwner))}</span>${escapeHtml(ex.question.text)}`;
+      const items = sheetReplyItems(ex);
+      sheetReplies.innerHTML = items
+        .map((label, i) => `<button type="button" class="sheet-reply" data-i="${i}">${escapeHtml(label)}</button>`)
+        .join('');
+      sheetReplies.dataset.items = JSON.stringify(items);  // set as property → no HTML escaping needed
+      sheetText.value = '';
+      sheetText.style.height = '';
+      sheetStatus.textContent = '';
+      sheetStatus.className = 'sheet-status';
+      sheetSend.disabled = false;
+      sheetBackdrop.classList.add('open');
+      sheet.classList.add('open');
+      sheet.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeSheet() {
+      replyCard = null;
+      sheetBackdrop.classList.remove('open');
+      sheet.classList.remove('open');
+      sheet.setAttribute('aria-hidden', 'true');
+    }
+
+    // Bound message answered elsewhere (e.g. from the screen) → it's no longer a
+    // live incoming card after the recap refetch, so close to avoid a duplicate.
+    function closeSheetIfBoundGone() {
+      if (!replyCard) return;
+      const live = recapExchanges.some(
+        (x) => x.msgId === replyCard.msgId && !x.answer && x.direction === 'in');
+      if (!live) closeSheet();
+    }
+
+    // Send a reply for the open card. A preset chip (`btn`) gets transient
+    // feedback; free text uses the Envoyer button. Both hit /reply.
+    async function sendReply(label, btn) {
+      if (!replyCard) return;
+      const text = (label || '').trim();
+      if (!text) return;
+      const to = peerIdByOwner[replyCard.fromOwner];
+      if (!to) {
+        sheetStatus.textContent = `${recapNameFor(replyCard.fromOwner)} hors ligne`;
+        sheetStatus.className = 'sheet-status err';
+        return;
+      }
+      if (btn) btn.disabled = true;
+      sheetSend.disabled = true;
+      sheetStatus.textContent = 'Envoi…';
+      sheetStatus.className = 'sheet-status';
+      try {
+        const r = await fetch('/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to, label: text, replyToMsgId: replyCard.msgId || null }),
+        });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          throw new Error(d.error || 'Échec');
+        }
+        if (btn) { btn.classList.add('sent'); btn.textContent = '✓ ' + btn.textContent; }
+        // history:new refetches the récap; our outgoing reply pairs with this
+        // message so its button drops. Close after a beat so the ✓ shows.
+        setTimeout(closeSheet, 350);
+      } catch (err) {
+        sheetStatus.textContent = err.message || 'Erreur';
+        sheetStatus.className = 'sheet-status err';
+        if (btn) btn.disabled = false;
+        sheetSend.disabled = false;
+      }
+    }
+
+    // Open from a recap reply button.
+    recapList.addEventListener('click', (e) => {
+      const btn = e.target.closest('.recap-reply');
+      if (!btn || btn.disabled) return;
+      const ex = recapExchanges.find((x) => x.msgId === btn.dataset.msgId);
+      if (ex) openSheet(ex);
+    });
+
+    // Preset chip = immediate send.
+    sheetReplies.addEventListener('click', (e) => {
+      const btn = e.target.closest('.sheet-reply');
+      if (!btn || btn.disabled) return;
+      const items = JSON.parse(sheetReplies.dataset.items || '[]');
+      const label = items[Number(btn.dataset.i)];
+      if (label != null) sendReply(label, btn);
+    });
+
+    sheetSend.addEventListener('click', () => sendReply(sheetText.value));
+    sheetText.addEventListener('input', () => {
+      sheetText.style.height = 'auto';
+      sheetText.style.height = Math.min(sheetText.scrollHeight, 140) + 'px';
+    });
+    sheetBackdrop.addEventListener('click', closeSheet);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && replyCard) closeSheet(); });
 
     document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1297,6 +1631,7 @@
     // Resolve names first so the récap's sender initials are correct on first
     // paint; thereafter it self-refreshes via the history:new / msg:status events.
     Promise.all([loadMe(), loadPeers()]).then(loadRecap);
+    loadDefaultReplies();
     setInterval(loadPeers, 5000);
     // Keep the "→ HH:MM" hints honest as time passes (mainly affects
     // "Jusque ce soir" which counts down toward 22:00).
