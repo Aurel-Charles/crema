@@ -18,7 +18,10 @@ export function discoverBroker({ onUrl }) {
   const onServiceUp = async (service) => {
     const host = service.host?.replace(/\.$/, '');
     if (!host || !service.port) return;
-    const address = await resolveHost(host);
+    // resolveHost returns null when the .local lookup fails; fall back to the
+    // hostname so we build ws://broker.local:port (NSS-resolvable) rather than
+    // ws://null:port.
+    const address = await resolveHost(host) ?? host;
     const url = `ws://${address}:${service.port}`;
     peerLog('broker:discovered', `Broker trouvé sur ${url}`, { url, host });
     onUrl(url);

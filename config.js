@@ -16,7 +16,12 @@ export const OWNER = process.env.CREMA_OWNER ?? deriveOwnerFromHostname();
 export const INSTANCE_ID = randomUUID();
 export const EMBED_BROKER = process.env.CREMA_EMBED_BROKER === '1';
 export const ALLOW_P2P_IN_EMBEDDED_BROKER = process.env.CREMA_ALLOW_P2P_IN_EMBEDDED_BROKER === '1';
-export const MDNS_RESOLVE_ADDRESSES = process.env.CREMA_MDNS_RESOLVE_ADDRESSES !== '0';
+// Opt-in (default off): add DNSServiceGetAddrInfo to the mDNS resolverSequence
+// so peers.js can read the IP straight from the service record. That symbol is
+// absent in libavahi-compat (the Pi build), where it throws every browse cycle
+// — pure log spam with no benefit, since DNSServiceResolve already yields the
+// .local host we resolve via NSS. Enable (=1) only on a real Bonjour stack.
+export const MDNS_RESOLVE_ADDRESSES = process.env.CREMA_MDNS_RESOLVE_ADDRESSES === '1';
 
 // Transport selection — see docs/broker-protocol.md.
 //   dual   : broker primary + p2p fallback, both live at once (default)
