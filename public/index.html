@@ -299,6 +299,40 @@
     }
     .envoi-changer.open .caret { transform: rotate(180deg); }
 
+    /* Send shortcuts (V5 quick-actions, mirrored from the screen). Pinned
+       shortcuts carry a "→ name" dest label; global ones follow the picker. */
+    .shortcuts-field[hidden] { display: none; }
+    .shortcuts-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .shortcut-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      background: var(--crema-surface);
+      border: 1px solid var(--crema-stroke);
+      border-radius: 999px;
+      color: var(--crema-text);
+      font-family: var(--crema-font-sans);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .shortcut-btn .sc-icon { font-size: 18px; line-height: 1; }
+    .shortcut-btn .sc-dest {
+      font-family: var(--crema-font-mono);
+      font-size: 11px;
+      color: var(--crema-muted);
+    }
+    .shortcut-btn:active { border-color: var(--crema-accent); background: var(--crema-stroke-faint); }
+    .shortcut-btn:disabled { opacity: 0.4; cursor: default; }
+    .shortcut-btn.sent { border-color: #87C459; color: #5e9e3c; }
+    .shortcut-btn.failed { border-color: var(--crema-accent); color: var(--crema-accent); }
+
     /* Chips (response options) */
     .chips {
       display: flex;
@@ -859,6 +893,11 @@
       </div>
     </div>
 
+    <div class="field shortcuts-field" id="shortcuts-field" hidden>
+      <label class="mono-label">Raccourcis</label>
+      <div class="shortcuts-bar" id="shortcuts-bar"></div>
+    </div>
+
     <div class="field">
       <div class="msg-head">
         <label for="text" class="mono-label">message</label>
@@ -960,12 +999,15 @@
     const envoiName = document.getElementById('envoi-name');
     const recapEl = document.getElementById('recap');
     const recapList = document.getElementById('recap-list');
+    const shortcutsField = document.getElementById('shortcuts-field');
+    const shortcutsBar = document.getElementById('shortcuts-bar');
 
     // ===== State =====
     let options = [];                 // string[]
     let selectedPreset = '5min';      // default for plain messages
     let ttlManuallySet = false;       // true once user clicks a preset
     let peers = [];
+    let shortcuts = [];               // send shortcuts (V5), fetched from /shortcuts
     let myOwner = '';                 // populated by loadMe(), used by the envoi hero
     // owner → display name (nickname || owner). Fed by loadMe()/loadPeers() so
     // the récap can resolve sender initials without its own /me|/peers fetches.
@@ -1231,6 +1273,9 @@
 
     // "tu envoies à {peer}" hero — mirror of the picker's selection
     function renderHero() {
+      // Peer set or current target changed → global shortcuts' reachability and
+      // the destination they resolve to may have shifted; keep the bar honest.
+      renderShortcuts();
       if (peers.length === 0) {
         envoiName.textContent = '…';
         envoiName.style.fontSize = '';
@@ -1323,6 +1368,90 @@
         renderHero();
       }
     }
+
+    // ===== Raccourcis d'envoi (V5) =====
+    // Same data + endpoint as the screen's footer bar. Routing mirrors the
+    // screen: a pinned shortcut keeps its own target; a global one (empty
+    // targetOwner) follows the recipient currently chosen in the picker above.
+    function currentTargetOwner() {
+      const p = peers.find((x) => x.instanceId === targetSel.value);
+      return p ? p.owner : '';
+    }
+    function isOwnerOnline(owner) {
+      return !!owner && peers.some((p) => p.owner === owner);
+    }
+    // Who a shortcut would actually reach. '' = nothing reachable → disabled.
+    function shortcutTarget(s) {
+      return s.targetOwner || currentTargetOwner();
+    }
+
+    function renderShortcuts() {
+      if (shortcuts.length === 0) { shortcutsField.hidden = true; return; }
+      shortcutsBar.innerHTML = shortcuts.map((s, i) => {
+        const dest = shortcutTarget(s);
+        const online = isOwnerOnline(dest);
+        const iconHtml = s.icon ? `<span class="sc-icon">${escapeHtml(s.icon)}</span>` : '';
+        // Pinned shortcuts label their fixed destination; global ones follow
+        // the picker, so no per-button label (the hero already names the target).
+        const destHtml = s.targetOwner
+          ? `<span class="sc-dest">→ ${escapeHtml(nameMap[s.targetOwner] || s.targetOwner)}</span>`
+          : '';
+        return `<button type="button" class="shortcut-btn" data-i="${i}" ${online ? '' : 'disabled'}>${iconHtml}<span class="sc-lbl">${escapeHtml(s.label)}</span>${destHtml}</button>`;
+      }).join('');
+      shortcutsField.hidden = false;
+    }
+
+    async function loadShortcuts() {
+      try {
+        shortcuts = await (await fetch('/shortcuts')).json();
+      } catch {
+        shortcuts = [];
+      }
+      renderShortcuts();
+    }
+
+    // Fire-and-feedback. Disable the whole bar during the round-trip (no
+    // double-send), flash the tapped button, then re-render to restore state.
+    async function sendShortcut(s, btn) {
+      const dest = shortcutTarget(s);
+      if (!dest) return;
+      shortcutsBar.querySelectorAll('.shortcut-btn').forEach((b) => { b.disabled = true; });
+      const lblEl = btn.querySelector('.sc-lbl');
+      const originalLabel = lblEl ? lblEl.textContent : '';
+      // Pinned → server uses its own target; global → pass the current recipient.
+      const body = s.targetOwner ? { id: s.id } : { id: s.id, targetOwner: dest };
+      try {
+        const r = await fetch('/shortcut/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error();
+        btn.classList.add('sent');
+        if (lblEl) lblEl.textContent = '✓ Envoyé';
+        setTimeout(renderShortcuts, 1500);
+      } catch {
+        btn.classList.add('failed');
+        if (lblEl) lblEl.textContent = '✕ Échec';
+        setTimeout(() => {
+          btn.classList.remove('failed');
+          if (lblEl) lblEl.textContent = originalLabel;
+          renderShortcuts();
+        }, 2000);
+      }
+    }
+
+    shortcutsBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('.shortcut-btn');
+      if (!btn || btn.disabled) return;
+      const s = shortcuts[Number(btn.dataset.i)];
+      if (s) sendShortcut(s, btn);
+    });
+
+    socket.on('shortcuts:updated', (list) => {
+      shortcuts = Array.isArray(list) ? list : [];
+      renderShortcuts();
+    });
 
     // ===== Récap derniers échanges =====
     // Resolve a sender's display initial (nickname || owner → first char). The
@@ -1632,6 +1761,7 @@
     // paint; thereafter it self-refreshes via the history:new / msg:status events.
     Promise.all([loadMe(), loadPeers()]).then(loadRecap);
     loadDefaultReplies();
+    loadShortcuts();
     setInterval(loadPeers, 5000);
     // Keep the "→ HH:MM" hints honest as time passes (mainly affects
     // "Jusque ce soir" which counts down toward 22:00).
