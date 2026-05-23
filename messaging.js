@@ -67,6 +67,9 @@ function handleIncoming(payload, io) {
   const id = typeof payload?.id === 'string' ? payload.id : null;
   const expiresAt = typeof payload?.expiresAt === 'string' ? payload.expiresAt : null;
   const replyToMsgId = typeof payload?.replyToMsgId === 'string' ? payload.replyToMsgId : null;
+  // Which channel the reply was made through, for display on the original
+  // sender's "répondu" badge. Whitelisted; anything else → null (older peers).
+  const via = (payload?.via === 'pwa' || payload?.via === 'screen') ? payload.via : null;
   const responseOptions = sanitizeResponseOptions(payload?.responseOptions);
   if (!text) return { ok: false, error: 'Message vide' };
 
@@ -82,8 +85,8 @@ function handleIncoming(payload, io) {
       const stored = db.getMessage(replyToMsgId);
       if (stored) replyToText = stored.text;
     }
-    db.setStatus(replyToMsgId, 'replied');
-    io.emit('msg:status', { id: replyToMsgId, status: 'replied' });
+    db.markReplied(replyToMsgId, via);
+    io.emit('msg:status', { id: replyToMsgId, status: 'replied', via });
   }
 
   const opts = responseOptions.length > 0 ? responseOptions : null;
@@ -238,6 +241,9 @@ export function init({ app, io, transport }) {
     const to = typeof req.body?.to === 'string' ? req.body.to : '';
     const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
     const replyToMsgId = typeof req.body?.replyToMsgId === 'string' ? req.body.replyToMsgId : null;
+    // Which UI sent this reply — travels to the peer so their "répondu" badge
+    // can show 📱 (PWA) vs 🖥️ (screen). Whitelisted; default null.
+    const via = (req.body?.via === 'pwa' || req.body?.via === 'screen') ? req.body.via : null;
     if (!to) return res.status(400).json({ error: 'Destinataire manquant' });
     if (!label) return res.status(400).json({ error: 'Réponse vide' });
 
@@ -250,6 +256,7 @@ export function init({ app, io, transport }) {
       fromInstanceId: INSTANCE_ID,
       isReply: true,
       replyToMsgId,
+      via,
     };
 
     const result = await transport.deliver(

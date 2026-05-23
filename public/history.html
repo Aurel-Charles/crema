@@ -139,6 +139,13 @@
       border-radius: 999px;
       line-height: 1.5;
     }
+    /* Reply-channel glyph inside the "répondu" badge — sized down a touch and
+     * nudged onto the baseline so the emoji doesn't inflate the pill. */
+    .msg-meta .status .chan {
+      font-size: 10px;
+      margin-left: 1px;
+      vertical-align: 1px;
+    }
     /* Only "en attente" wears the attention gold — design rule */
     .status-pending {
       background: var(--crema-attention);
@@ -296,6 +303,15 @@
       return (name ?? '?').charAt(0).toUpperCase();
     }
 
+    // Reply-provenance glyph appended to the "répondu" badge: how the peer
+    // answered — 📱 from their PWA, 🖥️ tapped on their screen. '' if unknown
+    // (older replies / peers that predate the channel field).
+    function channelIcon(via) {
+      if (via === 'pwa')    return ' <span class="chan" title="répondu depuis le téléphone">📱</span>';
+      if (via === 'screen') return ' <span class="chan" title="répondu sur l’écran">🖥️</span>';
+      return '';
+    }
+
     function renderMessage(msg, myOwner) {
       const time = timeFmt.format(new Date(msg.createdAt));
       // Direction by typography: A → F means A sent to F. Owners resolve to
@@ -310,8 +326,9 @@
         + `<span class="full">${esc(toName ?? '?')}</span><span class="init">${esc(initial(toName))}</span>`
         + `</span>`;
       const status = statusLabel(msg.status);
+      const chan = msg.status === 'replied' ? channelIcon(msg.replyChannel) : '';
       const statusHtml = status
-        ? `<span class="status ${status.cls}">${status.label}</span>`
+        ? `<span class="status ${status.cls}">${status.label}${chan}</span>`
         : '';
       const replyCtx = (msg.isReply && msg.replyToText)
         ? `<div class="reply-context">en réponse à «&nbsp;${esc(msg.replyToText)}&nbsp;»</div>`
@@ -386,7 +403,7 @@
 
     socket.on('history:new', scheduleRefetch);
 
-    socket.on('msg:status', ({ id, status }) => {
+    socket.on('msg:status', ({ id, status, via }) => {
       if (!id || !status) return;
       const card = mainEl.querySelector(`[data-id="${id}"]`);
       if (!card) return;
@@ -397,7 +414,8 @@
       const next = statusLabel(status);
       if (!next) return;
       statusEl.className = `status ${next.cls}`;
-      statusEl.textContent = next.label;
+      // label is plain text; channelIcon emits a trusted, fixed span.
+      statusEl.innerHTML = next.label + (status === 'replied' ? channelIcon(via) : '');
       // The expired status also greys out the card.
       if (status === 'expired') card.classList.add('expired');
     });

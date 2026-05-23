@@ -23,7 +23,8 @@ export function init() {
       reply_to_msg_id TEXT,
       reply_to_text TEXT,
       response_options TEXT,
-      status TEXT NOT NULL DEFAULT 'pending'
+      status TEXT NOT NULL DEFAULT 'pending',
+      reply_channel TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
 
@@ -39,6 +40,17 @@ export function init() {
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_events_cat_ts ON events(category, ts DESC);
   `);
+
+  // Migration (idempotent): older DBs predate reply_channel — the channel a
+  // reply came through ('pwa' | 'screen'), stored on the original message when
+  // it's marked replied. CREATE TABLE IF NOT EXISTS won't add columns to an
+  // existing table, so add it here if missing.
+  const hasReplyChannel = db
+    .prepare('PRAGMA table_info(messages)')
+    .all()
+    .some((c) => c.name === 'reply_channel');
+  if (!hasReplyChannel) db.exec('ALTER TABLE messages ADD COLUMN reply_channel TEXT');
+
   stmts.insert = db.prepare(`
     INSERT INTO messages (
       id, direction, text, from_owner, to_owner, created_at, expires_at,
@@ -49,6 +61,11 @@ export function init() {
     )
   `);
   stmts.updateStatus = db.prepare('UPDATE messages SET status = ? WHERE id = ?');
+  // Mark an original message replied + record which channel the reply came
+  // through ('pwa' | 'screen' | null), in one shot.
+  stmts.markReplied = db.prepare(
+    "UPDATE messages SET status = 'replied', reply_channel = ? WHERE id = ?"
+  );
   stmts.updateStatusIfPending = db.prepare(
     "UPDATE messages SET status = ? WHERE id = ? AND status = 'pending'"
   );
@@ -82,6 +99,7 @@ function rowToMessage(row) {
     replyToText: row.reply_to_text,
     responseOptions: row.response_options ? JSON.parse(row.response_options) : null,
     status: row.status,
+    replyChannel: row.reply_channel ?? null,
   };
 }
 
@@ -125,6 +143,12 @@ export function insertMessage({
 
 export function setStatus(id, status) {
   stmts.updateStatus.run(status, id);
+}
+
+// Mark an original message as replied and record the reply's channel
+// ('pwa' | 'screen' | null). channel is best-effort metadata for display.
+export function markReplied(id, channel = null) {
+  stmts.markReplied.run(channel ?? null, id);
 }
 
 // Use for transitions that should not overwrite a terminal state

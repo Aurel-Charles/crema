@@ -1347,6 +1347,7 @@
             to: currentMsg.fromInstanceId,
             label: reply.label,
             replyToMsgId: currentMsg.id || null,
+            via: 'screen',
           }),
         });
         if (!r.ok) throw new Error('send failed');
