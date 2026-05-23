@@ -1534,7 +1534,7 @@
         const r = await fetch('/reply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to, label: text, replyToMsgId: replyCard.msgId || null }),
+          body: JSON.stringify({ to, label: text, replyToMsgId: replyCard.msgId || null, via: 'pwa' }),
         });
         if (!r.ok) {
           const d = await r.json().catch(() => ({}));
