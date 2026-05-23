@@ -254,7 +254,10 @@ body.crema-display .shortcut-btn:active {
   background: rgba(255, 255, 255, 0.7);
 }
 
-/* ===== History rainbow dots — une bande différente par message =====
+/* ===== History status dot — mode « signal » =====
+ * Un seul point qui ressort : les messages encore EN ATTENTE de réponse
+ * glow ambre, tout le reste (vu / répondu / expiré / terminal) est un point
+ * gris discret. L'œil tombe direct sur ce qui n'a pas encore de réponse.
  * (s'applique automatiquement à toute liste de .msg-card) */
 .msg-card {
   position: relative;
@@ -268,16 +271,14 @@ body.crema-display .shortcut-btn:active {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--crema-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--crema-accent) 22%, transparent);
+  background: color-mix(in srgb, var(--crema-muted) 55%, transparent);
 }
-.msg-card:nth-child(7n+1)::before { background: var(--band-1); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-1) 22%, transparent); }
-.msg-card:nth-child(7n+2)::before { background: var(--band-4); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-4) 22%, transparent); }
-.msg-card:nth-child(7n+3)::before { background: var(--band-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-2) 22%, transparent); }
-.msg-card:nth-child(7n+4)::before { background: var(--band-6); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-6) 22%, transparent); }
-.msg-card:nth-child(7n+5)::before { background: var(--band-5); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-5) 22%, transparent); }
-.msg-card:nth-child(7n+6)::before { background: var(--band-3); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-3) 22%, transparent); }
-.msg-card:nth-child(7n+7)::before { background: var(--band-7); box-shadow: 0 0 0 3px color-mix(in srgb, var(--band-7) 22%, transparent); }
+/* Le seul statut qui « réclame » quelque chose → ambre lumineux + halo.
+ * Cible le badge .status-pending posé sur la carte par history.html. */
+.msg-card:has(.status-pending)::before {
+  background: var(--crema-attention);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--crema-attention) 30%, transparent);
+}
 
 /* History entry body texte en serif italique (matche le mock "le fil") */
 .msg-card .msg-text {
