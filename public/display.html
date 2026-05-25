@@ -795,8 +795,14 @@
     body.screen-sm .shortcut-btn .lbl { font-size: 19px; max-width: 116px; }
     body.screen-sm .shortcut-btn .dest { font-size: 13px; max-width: 116px; }
 
-    /* — Message — more body room, hint dropped, replies big and centered. */
-    body.screen-sm .msg-top { left: 48px; right: 32px; }
+    /* — Message — more body room, hint dropped, replies big and centered.
+     *   Header enlarged too: the quoted question (.msg-quote, shown when a
+     *   reply lands) was unreadable at the default 13px on a 3.5" panel. */
+    body.screen-sm .msg-top { left: 48px; right: 32px; gap: 10px; }
+    body.screen-sm .msg .avatar { width: 42px; height: 42px; font-size: 23px; }
+    body.screen-sm .msg-sender { font-size: 18px; }
+    body.screen-sm .msg-ago { font-size: 13px; }
+    body.screen-sm .msg-quote { font-size: 21px; }
     body.screen-sm .msg-body { left: 48px; right: 48px; top: 68px; bottom: 150px; }
     body.screen-sm .msg-foot { left: 48px; right: 48px; bottom: 24px; justify-content: center; }
     body.screen-sm .msg-hint { display: none; }
