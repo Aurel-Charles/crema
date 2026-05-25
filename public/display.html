@@ -814,12 +814,16 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-    body.screen-sm .msg-body { left: 48px; right: 48px; top: 182px; bottom: 134px; }
-    body.screen-sm .msg-foot { left: 48px; right: 48px; bottom: 24px; justify-content: center; }
+    /* Incoming QUESTION (no quote): one-line header, big body, and plenty of
+     * room at the bottom for the enlarged reply buttons. */
+    body.screen-sm .msg-body { left: 48px; right: 48px; top: 84px; bottom: 192px; }
+    /* Incoming REPLY (the quoted question fills the top; no reply buttons). */
+    body.screen-sm #screen.msg:has(.msg-quote) .msg-body { top: 182px; bottom: 96px; }
+    body.screen-sm .msg-foot { left: 48px; right: 48px; bottom: 26px; justify-content: center; }
     body.screen-sm .msg-hint { display: none; }
-    body.screen-sm .reply-bar { width: 100%; justify-content: center; gap: 12px; }
+    body.screen-sm .reply-bar { width: 100%; justify-content: center; gap: 14px; }
     body.screen-sm .reply-btn {
-      min-height: 60px; font-size: 26px; padding: 10px 26px; border-width: 2px;
+      min-height: 80px; font-size: 33px; padding: 14px 32px; border-width: 2px;
     }
 
     /* — Recipient bar + picker — keep choices tappable. */
