@@ -754,6 +754,92 @@
       white-space: nowrap;
     }
 
+    /* ===== Small-screen profile (body.screen-sm, via ?screen=sm) =====
+     * Dedicated composition for physically tiny panels (pi-desk's 3.5"):
+     * same 800×480 coordinate space, but controls enlarged and decorative
+     * density dropped so every tap target clears ~9 mm. The default layout
+     * (no class) is untouched, so 7" / tablet / desktop keep their refined
+     * look. Tune freely on-device — these are starting proportions. */
+
+    /* — Idle — clock + date tightened on the left, trimmed so the date sits
+     *   right under the clock and the bottom recipient bar keeps its room. */
+    body.screen-sm .idle-clock { font-size: 168px; top: 92px; left: 52px; }
+    body.screen-sm .idle-footer { top: 250px; left: 56px; gap: 16px; }
+    body.screen-sm .idle-stat-value { font-size: 30px; }
+    body.screen-sm .idle-stat-label { font-size: 12px; }
+    /* Held-messages stat is noise on a small screen — drop it. */
+    body.screen-sm #msg-stat { display: none !important; }
+
+    /* Brand watermark (crema · <name> idle, crema · message in a message) was
+     * 10px/0.45 — invisible on the 3.5". Both share one rule so they stay the
+     * same size and don't glitch on the idle↔message transition. */
+    body.screen-sm .idle-watermark,
+    body.screen-sm .msg-watermark { left: 26px; font-size: 16px; opacity: 0.6; letter-spacing: 0.28em; }
+
+    /* Topbar spans the width: the moon stays top-left (enlarged), the presence
+     * list is pushed to the top-right corner so it never overlaps the clock. */
+    body.screen-sm .topbar {
+      top: 18px; left: 48px; right: 28px; gap: 0;
+      justify-content: space-between; align-items: flex-start;
+    }
+    body.screen-sm .dnd-btn { width: 84px; height: 84px; }
+    body.screen-sm .dnd-btn .moon { width: 44px; height: 44px; }
+    body.screen-sm #presence-list {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    }
+    body.screen-sm .presence { font-size: 19px; }
+    body.screen-sm .presence .dot { width: 11px; height: 11px; }
+
+    /* — Shortcuts — primary idle action, dropped below the top-right presence;
+     *   narrower with a safe right margin to clear panel overscan. */
+    body.screen-sm #shortcuts-bar { top: 166px; right: 38px; width: 280px; gap: 16px; }
+    body.screen-sm .shortcut-btn {
+      min-height: 124px; padding: 16px 12px; gap: 12px;
+      border-width: 2px; border-radius: 24px;
+    }
+    body.screen-sm .shortcut-btn .icon { font-size: 46px; }
+    body.screen-sm .shortcut-btn .lbl { font-size: 23px; max-width: 124px; }
+    body.screen-sm .shortcut-btn .dest { font-size: 14px; max-width: 124px; }
+
+    /* — Message — more body room, hint dropped, replies big and centered.
+     *   Header enlarged too: the quoted question (.msg-quote, shown when a
+     *   reply lands) was unreadable at the default 13px on a 3.5" panel. */
+    body.screen-sm .msg-top { left: 48px; right: 32px; gap: 10px; flex-wrap: wrap; row-gap: 10px; }
+    body.screen-sm .msg .avatar { width: 46px; height: 46px; font-size: 25px; }
+    body.screen-sm .msg-sender { font-size: 21px; }
+    body.screen-sm .msg-ago { font-size: 14px; }
+    /* Quoted question drops to its own full-width line so it can be large and
+     * wrap to two lines, instead of being crushed at the end of the header. */
+    body.screen-sm .msg-quote {
+      flex: 0 0 100%;
+      font-size: 40px;
+      line-height: 1.15;
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    /* Incoming QUESTION (no quote): one-line header, big body, and plenty of
+     * room at the bottom for the enlarged reply buttons. */
+    body.screen-sm .msg-body { left: 48px; right: 48px; top: 80px; bottom: 214px; }
+    /* Incoming REPLY (the quoted question fills the top; no reply buttons). */
+    body.screen-sm #screen.msg:has(.msg-quote) .msg-body { top: 182px; bottom: 96px; }
+    body.screen-sm .msg-foot { left: 48px; right: 48px; bottom: 26px; justify-content: center; }
+    body.screen-sm .msg-hint { display: none; }
+    body.screen-sm .reply-bar { width: 100%; justify-content: center; gap: 14px; }
+    body.screen-sm .reply-btn {
+      min-height: 96px; font-size: 40px; padding: 16px 38px; border-width: 2px;
+    }
+
+    /* — Recipient bar + picker — keep choices tappable. */
+    body.screen-sm #dest-bar { left: 56px; bottom: 22px; gap: 14px; }
+    body.screen-sm #dest-bar .db-line { font-size: 24px; }
+    body.screen-sm #dest-bar #dest-change { font-size: 24px; padding: 16px 36px; }
+    body.screen-sm .tp-tile { min-width: 150px; padding: 26px 22px; }
+    body.screen-sm .tp-tile .tp-name { font-size: 24px; }
+    body.screen-sm .tp-valider { font-size: 22px; padding: 16px 48px; }
+
   </style>
 </head>
 <body class="crema-display night">
@@ -796,6 +882,16 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    // ===== Screen profile =====
+    // Physically tiny panels (e.g. pi-desk's 3.5" Waveshare, 800×480 logical
+    // but ~75 mm wide) need larger touch targets. The whole UI auto-fits the
+    // viewport, so a zoom is a no-op — instead `?screen=sm` re-composes the
+    // same 800×480 stage with bigger, sparser controls (see body.screen-sm
+    // CSS). Set per-Pi via start-display.sh (CREMA_SCREEN / data/screen-profile);
+    // no param = the default 7"/tablet/desktop layout, untouched.
+    const SCREEN_PROFILE = new URLSearchParams(location.search).get('screen') || '';
+    if (SCREEN_PROFILE) document.body.classList.add('screen-' + SCREEN_PROFILE);
+
     // ===== Elements =====
     const screen = document.getElementById('screen');
     const presenceList = document.getElementById('presence-list');
