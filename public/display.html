@@ -754,6 +754,56 @@
       white-space: nowrap;
     }
 
+    /* ===== Small-screen profile (body.screen-sm, via ?screen=sm) =====
+     * Dedicated composition for physically tiny panels (pi-desk's 3.5"):
+     * same 800×480 coordinate space, but controls enlarged and decorative
+     * density dropped so every tap target clears ~9 mm. The default layout
+     * (no class) is untouched, so 7" / tablet / desktop keep their refined
+     * look. Tune freely on-device — these are starting proportions. */
+
+    /* — Idle — clock kept prominent but trimmed to free room below. */
+    body.screen-sm .idle-clock { font-size: 200px; top: 52px; left: 56px; }
+    body.screen-sm .idle-footer { top: 296px; left: 56px; gap: 18px; }
+    body.screen-sm .idle-stat-value { font-size: 32px; }
+    body.screen-sm .idle-stat-label { font-size: 12px; }
+    /* Held-messages stat is noise on a small screen — drop it. */
+    body.screen-sm #msg-stat { display: none !important; }
+
+    /* — Presence + DND — bigger, easier to read/tap. */
+    body.screen-sm .topbar { top: 20px; left: 52px; gap: 18px; }
+    body.screen-sm .presence { font-size: 22px; }
+    body.screen-sm .presence .dot { width: 12px; height: 12px; }
+    body.screen-sm .dnd-btn { width: 56px; height: 56px; }
+    body.screen-sm .dnd-btn .moon { width: 28px; height: 28px; }
+
+    /* — Shortcuts — the primary idle action: chunky, readable. */
+    body.screen-sm #shortcuts-bar { top: 116px; right: 26px; width: 300px; gap: 16px; }
+    body.screen-sm .shortcut-btn {
+      min-height: 104px; padding: 14px 12px; gap: 10px;
+      border-width: 2px; border-radius: 22px;
+    }
+    body.screen-sm .shortcut-btn .icon { font-size: 38px; }
+    body.screen-sm .shortcut-btn .lbl { font-size: 19px; max-width: 132px; }
+    body.screen-sm .shortcut-btn .dest { font-size: 13px; max-width: 132px; }
+
+    /* — Message — more body room, hint dropped, replies big and centered. */
+    body.screen-sm .msg-top { left: 48px; right: 32px; }
+    body.screen-sm .msg-body { left: 48px; right: 48px; top: 68px; bottom: 150px; }
+    body.screen-sm .msg-foot { left: 48px; right: 48px; bottom: 24px; justify-content: center; }
+    body.screen-sm .msg-hint { display: none; }
+    body.screen-sm .reply-bar { width: 100%; justify-content: center; gap: 12px; }
+    body.screen-sm .reply-btn {
+      min-height: 60px; font-size: 26px; padding: 10px 26px; border-width: 2px;
+    }
+
+    /* — Recipient bar + picker — keep choices tappable. */
+    body.screen-sm #dest-bar { left: 56px; bottom: 22px; gap: 14px; }
+    body.screen-sm #dest-bar .db-line { font-size: 24px; }
+    body.screen-sm #dest-bar #dest-change { font-size: 19px; padding: 12px 26px; }
+    body.screen-sm .tp-tile { min-width: 150px; padding: 26px 22px; }
+    body.screen-sm .tp-tile .tp-name { font-size: 24px; }
+    body.screen-sm .tp-valider { font-size: 22px; padding: 16px 48px; }
+
   </style>
 </head>
 <body class="crema-display night">
@@ -796,6 +846,16 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
+    // ===== Screen profile =====
+    // Physically tiny panels (e.g. pi-desk's 3.5" Waveshare, 800×480 logical
+    // but ~75 mm wide) need larger touch targets. The whole UI auto-fits the
+    // viewport, so a zoom is a no-op — instead `?screen=sm` re-composes the
+    // same 800×480 stage with bigger, sparser controls (see body.screen-sm
+    // CSS). Set per-Pi via start-display.sh (CREMA_SCREEN / data/screen-profile);
+    // no param = the default 7"/tablet/desktop layout, untouched.
+    const SCREEN_PROFILE = new URLSearchParams(location.search).get('screen') || '';
+    if (SCREEN_PROFILE) document.body.classList.add('screen-' + SCREEN_PROFILE);
+
     // ===== Elements =====
     const screen = document.getElementById('screen');
     const presenceList = document.getElementById('presence-list');
