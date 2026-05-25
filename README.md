@@ -41,8 +41,9 @@ screen.
   per-Pi in SQLite; `/history` shows status (en attente → vu → répondu/expiré)
   live, the display swaps `en ligne` for `écrit…` while a peer types, and
   `/logs` is a filterable event timeline.
-- **Direction Sauge** — a shared visual system across PWA and display. See
-  [`docs/architecture.md`](./docs/architecture.md#design--direction-sauge).
+- **Direction Mirage** — a shared sunset visual system (coral accent, Currents
+  rainbow signature) across PWA and display. See
+  [`docs/architecture.md`](./docs/architecture.md#design--direction-mirage).
 - **Small-screen profile** — a dedicated layout for physically tiny panels
   (e.g. a 3.5" touchscreen). See [`docs/pi-desk-3.5-screen.md`](./docs/pi-desk-3.5-screen.md).
 
@@ -62,7 +63,7 @@ screen.
 - [`setup.md`](./docs/setup.md) — install a new Pi, deploy updates, Docker image.
 - [`transport.md`](./docs/transport.md) — the three transport modes, switching, running the broker relay.
 - [`broker-protocol.md`](./docs/broker-protocol.md) — the broker wire protocol (register / deliver / presence).
-- [`architecture.md`](./docs/architecture.md) — how it's built, tech stack, and the Direction Sauge design system.
+- [`architecture.md`](./docs/architecture.md) — how it's built, tech stack, and the Direction Mirage design system.
 - [`operations.md`](./docs/operations.md) — day-to-day operating notes and known gotchas.
 - [`pi-desk-3.5-screen.md`](./docs/pi-desk-3.5-screen.md) — Waveshare 3.5" HDMI touchscreen setup.
 
@@ -90,7 +91,7 @@ public/
   logs.html            PWA activity log (filterable timeline grouped by day, live)
   display.html         Pi kiosk (clock, message, queue, DND moon, replies, shortcuts,
                        presence + typing indicator)
-  theme.css            Direction Sauge palette + .crema-label utility (single source of truth)
+  theme.css            Direction Mirage palette + .crema-label utility (single source of truth)
   manifest.json        PWA manifest
   service-worker.js    minimal SW to enable PWA install
   icon.svg

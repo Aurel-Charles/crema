@@ -41,24 +41,25 @@ Frontend is vanilla HTML/CSS/JS — no framework. The broker relay (`broker/`)
 is a standalone Node + Socket.IO process with no native deps beyond an
 optional `mdns` for self-advertisement.
 
-## Design — Direction Sauge
+## Design — Direction Mirage
 
-The visual system shared across PWA and display.
+The visual system shared across PWA and display, inspired by Tame Impala's
+*Currents*: a sunset of peach → blush → lavender with a rainbow signature.
+`public/theme.css` is the single source of truth.
 
-- **Palette** in `public/theme.css` is the single source of truth. PWA
-  runs light (`#F6F8F4`); display runs dark warm-green (`#121711`). Both
-  share the sage accent `#A8C49C` — the "living color" reserved for the
-  primary action (PWA send button), the active state of TTL presets and
-  recipient buttons, the resting clock on the display, and the "sent"
-  state of reply buttons. Warm gold `#C9A86A` is reserved for the lone
-  `en attente` status badge in `/history`: scarcity is what earns it
-  visual weight.
-- **Typographic signature** — `.crema-label` (uppercase, 0.25em kerned)
-  marks every identity surface: section labels in the PWA send form,
-  day headers in `/history`, sender labels on the display, presence
-  names, and the date below the clock. Mono is reserved for per-message
-  direction marks — the `A → F` initials in `/history` and the peer
-  initials in the segmented recipient picker.
-- **Recipient picker** scales with peer count: a segmented control
-  (mono initial + name) for 1–4 peers, falling back to a `<select>`
-  beyond that.
+- **Palette** — the PWA runs on a warm light background (`#FBF1E2`); the
+  display is a sunset gradient (peach → blush → lavender) with day/night
+  variants — more sun-yellow by day, more lavender at night. The "living
+  color" is **coral** `#E8896E`, reserved for the primary action (PWA send),
+  active TTL/recipient states, the resting clock, and the "sent" state of
+  reply buttons. Magenta-pink `#C4659C`, amber `#E8B25E` (attention) and
+  mint `#7DC0B0` (presence) round it out.
+- **Currents signature** — seven rainbow bands (`--band-1..7`: coral, amber,
+  lime, mint, dream-blue, lavender, magenta-rose) are exposed as tokens and
+  used as the left spine on the display and for status accents.
+- **Typographic signature** — `.crema-label` (uppercase, kerned DM Sans 700)
+  marks every identity surface: section labels, day headers in `/history`,
+  sender and presence names, the date below the clock. Instrument Serif
+  (italic) is the hero face for the clock and message text; JetBrains Mono is
+  reserved for technical/direction marks like the `A → F` initials in
+  `/history`.
