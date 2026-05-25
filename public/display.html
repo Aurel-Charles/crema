@@ -761,30 +761,39 @@
      * (no class) is untouched, so 7" / tablet / desktop keep their refined
      * look. Tune freely on-device — these are starting proportions. */
 
-    /* — Idle — clock kept prominent but trimmed to free room below. */
-    body.screen-sm .idle-clock { font-size: 200px; top: 52px; left: 56px; }
-    body.screen-sm .idle-footer { top: 296px; left: 56px; gap: 18px; }
-    body.screen-sm .idle-stat-value { font-size: 32px; }
+    /* — Idle — clock + date tightened on the left, trimmed so the date sits
+     *   right under the clock and the bottom recipient bar keeps its room. */
+    body.screen-sm .idle-clock { font-size: 168px; top: 92px; left: 52px; }
+    body.screen-sm .idle-footer { top: 250px; left: 56px; gap: 16px; }
+    body.screen-sm .idle-stat-value { font-size: 30px; }
     body.screen-sm .idle-stat-label { font-size: 12px; }
     /* Held-messages stat is noise on a small screen — drop it. */
     body.screen-sm #msg-stat { display: none !important; }
 
-    /* — Presence + DND — bigger, easier to read/tap. */
-    body.screen-sm .topbar { top: 20px; left: 52px; gap: 18px; }
-    body.screen-sm .presence { font-size: 22px; }
-    body.screen-sm .presence .dot { width: 12px; height: 12px; }
-    body.screen-sm .dnd-btn { width: 56px; height: 56px; }
-    body.screen-sm .dnd-btn .moon { width: 28px; height: 28px; }
+    /* Topbar spans the width: the moon stays top-left (enlarged), the presence
+     * list is pushed to the top-right corner so it never overlaps the clock. */
+    body.screen-sm .topbar {
+      top: 18px; left: 48px; right: 28px; gap: 0;
+      justify-content: space-between; align-items: flex-start;
+    }
+    body.screen-sm .dnd-btn { width: 66px; height: 66px; }
+    body.screen-sm .dnd-btn .moon { width: 34px; height: 34px; }
+    body.screen-sm #presence-list {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+    }
+    body.screen-sm .presence { font-size: 19px; }
+    body.screen-sm .presence .dot { width: 11px; height: 11px; }
 
-    /* — Shortcuts — the primary idle action: chunky, readable. */
-    body.screen-sm #shortcuts-bar { top: 116px; right: 26px; width: 300px; gap: 16px; }
+    /* — Shortcuts — primary idle action, dropped below the top-right presence;
+     *   narrower with a safe right margin to clear panel overscan. */
+    body.screen-sm #shortcuts-bar { top: 176px; right: 40px; width: 264px; gap: 14px; }
     body.screen-sm .shortcut-btn {
       min-height: 104px; padding: 14px 12px; gap: 10px;
       border-width: 2px; border-radius: 22px;
     }
     body.screen-sm .shortcut-btn .icon { font-size: 38px; }
-    body.screen-sm .shortcut-btn .lbl { font-size: 19px; max-width: 132px; }
-    body.screen-sm .shortcut-btn .dest { font-size: 13px; max-width: 132px; }
+    body.screen-sm .shortcut-btn .lbl { font-size: 19px; max-width: 116px; }
+    body.screen-sm .shortcut-btn .dest { font-size: 13px; max-width: 116px; }
 
     /* — Message — more body room, hint dropped, replies big and centered. */
     body.screen-sm .msg-top { left: 48px; right: 32px; }
