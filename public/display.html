@@ -770,6 +770,10 @@
     /* Held-messages stat is noise on a small screen — drop it. */
     body.screen-sm #msg-stat { display: none !important; }
 
+    /* Brand watermark (crema · <name>) was 10px/0.45 — invisible on the 3.5".
+     * Enlarge and pull it off the left edge (clear of the rainbow spine). */
+    body.screen-sm .idle-watermark { left: 26px; font-size: 16px; opacity: 0.6; letter-spacing: 0.28em; }
+
     /* Topbar spans the width: the moon stays top-left (enlarged), the presence
      * list is pushed to the top-right corner so it never overlaps the clock. */
     body.screen-sm .topbar {
@@ -786,14 +790,14 @@
 
     /* — Shortcuts — primary idle action, dropped below the top-right presence;
      *   narrower with a safe right margin to clear panel overscan. */
-    body.screen-sm #shortcuts-bar { top: 176px; right: 40px; width: 264px; gap: 14px; }
+    body.screen-sm #shortcuts-bar { top: 166px; right: 38px; width: 280px; gap: 16px; }
     body.screen-sm .shortcut-btn {
-      min-height: 104px; padding: 14px 12px; gap: 10px;
-      border-width: 2px; border-radius: 22px;
+      min-height: 124px; padding: 16px 12px; gap: 12px;
+      border-width: 2px; border-radius: 24px;
     }
-    body.screen-sm .shortcut-btn .icon { font-size: 38px; }
-    body.screen-sm .shortcut-btn .lbl { font-size: 19px; max-width: 116px; }
-    body.screen-sm .shortcut-btn .dest { font-size: 13px; max-width: 116px; }
+    body.screen-sm .shortcut-btn .icon { font-size: 46px; }
+    body.screen-sm .shortcut-btn .lbl { font-size: 23px; max-width: 124px; }
+    body.screen-sm .shortcut-btn .dest { font-size: 14px; max-width: 124px; }
 
     /* — Message — more body room, hint dropped, replies big and centered.
      *   Header enlarged too: the quoted question (.msg-quote, shown when a
@@ -816,14 +820,14 @@
     }
     /* Incoming QUESTION (no quote): one-line header, big body, and plenty of
      * room at the bottom for the enlarged reply buttons. */
-    body.screen-sm .msg-body { left: 48px; right: 48px; top: 84px; bottom: 192px; }
+    body.screen-sm .msg-body { left: 48px; right: 48px; top: 80px; bottom: 214px; }
     /* Incoming REPLY (the quoted question fills the top; no reply buttons). */
     body.screen-sm #screen.msg:has(.msg-quote) .msg-body { top: 182px; bottom: 96px; }
     body.screen-sm .msg-foot { left: 48px; right: 48px; bottom: 26px; justify-content: center; }
     body.screen-sm .msg-hint { display: none; }
     body.screen-sm .reply-bar { width: 100%; justify-content: center; gap: 14px; }
     body.screen-sm .reply-btn {
-      min-height: 80px; font-size: 33px; padding: 14px 32px; border-width: 2px;
+      min-height: 96px; font-size: 40px; padding: 16px 38px; border-width: 2px;
     }
 
     /* — Recipient bar + picker — keep choices tappable. */
