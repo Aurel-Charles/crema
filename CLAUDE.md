@@ -104,7 +104,7 @@ broker live tourne sur le Mac (:4000), cf. mémoire `live-broker-on-mac`.**
 
 ## Workflow de dev
 
-- **Source de vérité** : repo Git sur GitHub (privé)
+- **Source de vérité** : repo Git sur GitHub (public — aucun secret commité, `data/` et tokens broker hors repo ; clone HTTPS sans auth)
 - **Édition** : Claude Code sur Mac, repo cloné en local
 - **Déploiement Pi** : `git pull` manuel sur chaque Pi (+ `install-pi.sh` pour le setup initial) ; automatisation (webhook / GitHub Actions ssh) toujours envisageable mais pas en place
 - **Pas de CI/CD** pour l'instant
