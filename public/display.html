@@ -770,9 +770,11 @@
     /* Held-messages stat is noise on a small screen — drop it. */
     body.screen-sm #msg-stat { display: none !important; }
 
-    /* Brand watermark (crema · <name>) was 10px/0.45 — invisible on the 3.5".
-     * Enlarge and pull it off the left edge (clear of the rainbow spine). */
-    body.screen-sm .idle-watermark { left: 26px; font-size: 16px; opacity: 0.6; letter-spacing: 0.28em; }
+    /* Brand watermark (crema · <name> idle, crema · message in a message) was
+     * 10px/0.45 — invisible on the 3.5". Both share one rule so they stay the
+     * same size and don't glitch on the idle↔message transition. */
+    body.screen-sm .idle-watermark,
+    body.screen-sm .msg-watermark { left: 26px; font-size: 16px; opacity: 0.6; letter-spacing: 0.28em; }
 
     /* Topbar spans the width: the moon stays top-left (enlarged), the presence
      * list is pushed to the top-right corner so it never overlaps the clock. */
