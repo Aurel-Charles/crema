@@ -6,11 +6,14 @@
 #   ansible-playbook playbook.yml --ask-become-pass
 #
 # Idempotent: re-running only changes what drifted. Tags let you scope a re-run:
-#   --tags deploy   git pull + npm install (e.g. to push a code update)
+#   --tags deploy   git pull + npm install, then auto restart Node + reload
+#                   Chromium when the code actually changed
 #   --tags service  only the systemd server unit
 #   --tags transport  only the broker pin drop-in (hosts with crema_broker_url)
 #   --tags display  only the Chromium kiosk autostart
 #   --tags watchdog  only the USB Wi-Fi watchdog (wifi_dongle group)
+#   --tags reload   force restart Node + reload Chromium, no pull (opt-in)
+#   --tags reboot   reboot the targeted Pis, one at a time (opt-in, never auto)
 
 - name: Crema — install on each Pi
   hosts: crema
@@ -61,6 +64,9 @@
 
     # --- Deploy: clone the repo + npm install. Runs by default (one-shot install);
     # also scriptable on its own via `--tags deploy` to update code later. ---
+    # Notifies both handlers so a code-only pull (no package.json change) still
+    # restarts the Node server AND reloads the kiosk — backend edits land in the
+    # server, frontend edits (public/, theme.css) land on the screen.
     - name: Clone or update the Crema repo
       tags: [deploy]
       ansible.builtin.git:
@@ -68,6 +74,9 @@
         dest: "{{ crema_dir }}"
         version: "{{ crema_branch }}"
         update: true
+      notify:
+        - Restart crema
+        - Reload display
 
     - name: Install npm dependencies (compiles native modules on the Pi)
       tags: [deploy]
@@ -188,6 +197,24 @@
       changed_when: false
       when: raspi_config.rc == 0
 
+    # Forced restart/reload, no pull — for debugging or after a manual edit on
+    # the Pi. `never` keeps these out of a full provisioning run; they fire only
+    # on an explicit `--tags reload`. Mirrors the manual `pkill chromium`
+    # workflow: start-display.sh's loop reopens the kiosk ~3s later.
+    - name: Restart crema server (forced)
+      become: true
+      tags: [reload, never]
+      ansible.builtin.systemd:
+        name: crema.service
+        state: restarted
+
+    - name: Reload the Chromium kiosk (forced)
+      tags: [reload, never]
+      ansible.builtin.command: pkill -f chromium
+      register: pkill_forced
+      changed_when: pkill_forced.rc == 0
+      failed_when: pkill_forced.rc not in [0, 1]
+
   handlers:
     - name: Reload systemd
       become: true
@@ -199,6 +226,14 @@
       ansible.builtin.systemd:
         name: crema.service
         state: restarted
+
+    # No become: the kiosk runs under the SSH/session user, not root. pkill
+    # returns rc 1 when nothing matched (kiosk already down) — not an error.
+    - name: Reload display
+      ansible.builtin.command: pkill -f chromium
+      register: pkill_display
+      changed_when: pkill_display.rc == 0
+      failed_when: pkill_display.rc not in [0, 1]
 
 
 # Equivalent of wifi-watchdog-on.sh — only on Pis with a USB Wi-Fi dongle.
@@ -248,3 +283,20 @@
       ansible.builtin.systemd:
         name: wifi-watchdog.service
         state: restarted
+
+
+# Reboot the Pis — opt-in only (`--tags reboot`). `never` + the explicit tag
+# keep it out of every other run, so a routine deploy can't reboot a Pi by
+# accident. serial: 1 reboots one Pi at a time and waits for it to come back,
+# so the fleet's screens never all go dark at once. Scope further with --limit.
+- name: Crema — reboot Pis (opt-in, one at a time)
+  hosts: crema
+  gather_facts: false
+  serial: 1
+  tags: [reboot, never]
+
+  tasks:
+    - name: Reboot and wait for the Pi to come back
+      become: true
+      ansible.builtin.reboot:
+        reboot_timeout: 300
