@@ -286,6 +286,9 @@
       color: var(--crema-text);
       font-variant-numeric: tabular-nums;
     }
+    .idle-date {
+      font-style: italic;
+    }
     .idle-divider {
       width: 1px;
       align-self: stretch;
@@ -1014,15 +1017,15 @@
     const QUEUE_DRAIN_DELAY_MS = 600;
     const NOTIF_PREVIEW_MAX_CHARS = 36;
 
-    const weekdayFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long' });
     const timeFmt = new Intl.DateTimeFormat('fr-FR', {
       hour: '2-digit', minute: '2-digit', hour12: false,
     });
-    // Compact footer date — "lundi 18.05" per the Mega Type canvas.
+    // Footer date — weekday + day + month name, e.g. "lundi 18 mai".
+    const dateFmt = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long',
+    });
     function formatDateCompact(d) {
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      return `${weekdayFmt.format(d)} ${dd}.${mm}`;
+      return dateFmt.format(d);
     }
 
     // ===== State =====
@@ -1081,7 +1084,7 @@
         <div class="idle-clock">${timeFmt.format(now)}</div>
         <footer class="idle-footer">
           <div class="idle-stat">
-            <span class="idle-stat-value">${escapeHtml(formatDateCompact(now))}</span>
+            <span class="idle-stat-value idle-date">${escapeHtml(formatDateCompact(now))}</span>
           </div>
           <div class="idle-stat" id="msg-stat" hidden>
             <span class="idle-divider"></span>
