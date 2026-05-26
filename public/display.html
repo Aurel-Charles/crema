@@ -855,6 +855,9 @@
     body.screen-sm .msg-top { left: 48px; right: 32px; gap: 10px; flex-wrap: wrap; row-gap: 10px; }
     body.screen-sm .msg .avatar { width: 46px; height: 46px; font-size: 25px; }
     body.screen-sm .msg-sender { font-size: 21px; }
+    /* Avatar halos re-anchored on the larger sm avatar (46px at ~48,26):
+     * box sized so the ring's start (scale 0.7) wraps the avatar. */
+    body.screen-sm .msg-halo { left: 38px; top: 16px; width: 66px; height: 66px; }
     body.screen-sm .msg-ago { font-size: 14px; }
     /* Quoted question drops to its own full-width line so it can be large and
      * wrap to two lines, instead of being crushed at the end of the header. */
