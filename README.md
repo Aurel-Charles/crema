@@ -57,6 +57,7 @@ screen.
 | Switch transport | `./pin-broker.sh` · `./reset-transport.sh` · `./disable-broker.sh` ([transport](./docs/transport.md)) |
 | Run the broker relay | `cd broker && ./install-broker.sh` ([transport](./docs/transport.md)) |
 | Server logs / status | `sudo journalctl -u crema -f` · `sudo systemctl status crema` |
+| USB Wi-Fi dongle drops | `./wifi-watchdog-on.sh` ([usb-wifi-dongle](./docs/usb-wifi-dongle.md)) |
 
 ## Docs
 
@@ -66,6 +67,7 @@ screen.
 - [`architecture.md`](./docs/architecture.md) — how it's built, tech stack, and the Direction Mirage design system.
 - [`operations.md`](./docs/operations.md) — day-to-day operating notes and known gotchas.
 - [`pi-desk-3.5-screen.md`](./docs/pi-desk-3.5-screen.md) — Waveshare 3.5" HDMI touchscreen setup.
+- [`usb-wifi-dongle.md`](./docs/usb-wifi-dongle.md) — USB Wi-Fi dongle notes and the rtl8xxxu auto-recovery watchdog.
 
 ## Repo layout
 
