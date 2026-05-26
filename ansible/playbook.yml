@@ -44,7 +44,7 @@
         curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
       args:
         executable: /bin/bash
-        creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
+        creates: "{{ ansible_facts.env.HOME }}/.nvm/nvm.sh"
 
     - name: Install Node.js 20 via nvm and set it as default
       ansible.builtin.shell: |
@@ -134,7 +134,7 @@
     - name: Ensure autostart directory exists
       tags: [display]
       ansible.builtin.file:
-        path: "{{ ansible_env.HOME }}/.config/autostart"
+        path: "{{ ansible_facts.env.HOME }}/.config/autostart"
         state: directory
         mode: "0755"
 
@@ -142,7 +142,7 @@
       tags: [display]
       ansible.builtin.template:
         src: crema-display.desktop.j2
-        dest: "{{ ansible_env.HOME }}/.config/autostart/crema-display.desktop"
+        dest: "{{ ansible_facts.env.HOME }}/.config/autostart/crema-display.desktop"
         mode: "0644"
 
     # install-pi.sh step 3: disable screen blanking (X11 + Wayland).
