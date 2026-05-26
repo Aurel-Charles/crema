@@ -1,13 +1,15 @@
 # Crema — Spec projet
 
-Système de messagerie local entre deux Raspberry Pi (4B + 3B+) équipés à terme d'écrans tactiles 7", installés en permanent dans une maison partagée. Chaque Pi affiche une horloge/veilleuse au repos. Les messages sont envoyés depuis un téléphone (PWA) ou via raccourcis tactiles directs sur l'écran. Ils peuvent inclure des options de réponse préfabriquées et un TTL exprimant la fenêtre de disponibilité de l'émetteur.
+Système de messagerie local entre Raspberry Pi (trois aujourd'hui : 4B, 3B+ et un 3ᵉ « pi-desk ») équipés d'écrans tactiles (7" cible, 3.5" sur pi-desk), installés en permanent dans une maison partagée. Chaque Pi affiche une horloge/veilleuse au repos. Les messages sont envoyés depuis un téléphone (PWA) ou via raccourcis tactiles directs sur l'écran. Ils peuvent inclure des options de réponse préfabriquées et un TTL exprimant la fenêtre de disponibilité de l'émetteur.
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
-## Étape actuelle : V7.1 (surnom d'affichage propagé, en fonctionnement)
+## Étape actuelle : V7.2 (profil petit écran + watchdog Wi-Fi USB, en fonctionnement)
 
-La roadmap V0→V6 est livrée et tourne sur les deux Pi, plus le **transport dual**
-(V7.0) et le **surnom d'affichage** (V7.1). Crema est aujourd'hui un
+La roadmap V0→V6 est livrée, plus le **transport dual** (V7.0), le **surnom
+d'affichage** (V7.1) et le **profil petit écran + watchdog Wi-Fi USB** (V7.2).
+Tourne sur **trois Pi** : `pi-aurel`, `pi-slibar` et `pi-desk` (3ᵉ Pi, écran
+tactile 3.5"). Crema est aujourd'hui un
 **système pair-à-pair symétrique complet** : code identique sur chaque Pi,
 découverte mDNS automatique, messages/réponses/raccourcis/TTL, historique
 SQLite, accusés "vu" (V6.1) et indicateur de frappe (V6.2). **Aucun serveur
@@ -19,6 +21,16 @@ central** — le "serveur" du projet = le process Node qui tourne sur chaque Pi.
 `register`/`profile:update`, `/me`) ; `owner` reste l'**identité de routage
 immuable**. Stocké dans `data/identity.json` (`store.js`). Maj à chaud sans
 reboot via `transport.announceProfile()`. Voir mémoire `v7-1-display-nickname`.
+
+**Profil petit écran + watchdog Wi-Fi (V7.2)** : `pi-desk` tourne sur un écran
+Waveshare 3.5" (800×480 rendu sur un 3,5 pouces). Un **profil d'affichage `sm`**
+re-compose le stage idle/message avec des cibles tactiles plus grandes, activé
+par Pi via `data/screen-profile` (ou `CREMA_SCREEN=sm`) — vrai profil CSS, pas un
+zoom. Comme `pi-desk` utilise une **clé Wi-Fi USB** au driver `rtl8xxxu`
+capricieux (se fige après quelques heures), un **watchdog** systemd optionnel
+(`./wifi-watchdog-on.sh`) la récupère sans replug physique. Voir
+`docs/pi-desk-3.5-screen.md`, `docs/usb-wifi-dongle.md` et les mémoires
+`pi-desk-waveshare-touch` / `pi-desk-wifi-rtl8xxxu-drop`.
 
 **Architecture en place** :
 - **Découverte** : `peers.js` — chaque Pi s'annonce et browse le service mDNS
@@ -55,6 +67,8 @@ reboot via `transport.announceProfile()`. Voir mémoire `v7-1-display-nickname`.
 - `broker/` — le relais LAN autonome (`server.js`, `install-broker.sh`, `start-broker.sh`, `test-protocol.mjs`)
 - `install-pi.sh`, `start.sh`, `start-display.sh` — setup/lancement Pi
 - `pin-broker.sh` (dual + URL épinglée), `reset-transport.sh` (retour dual+découverte), `disable-broker.sh` (force p2p), `enable-broker.sh` (force broker pur) — bascule transport
+- `wifi-watchdog-on.sh` / `wifi-watchdog-off.sh` — watchdog Wi-Fi USB (Pi à clé USB, ex. pi-desk ; cf. `docs/usb-wifi-dongle.md`)
+- `docs/` — `setup`, `transport`, `broker-protocol`, `architecture`, `operations`, `pi-desk-3.5-screen`, `usb-wifi-dongle`
 
 ## Transport : trois modes (dual | p2p | broker)
 
@@ -143,12 +157,11 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - ✅ **V6** — Historique conversations (SQLite), accusés "vu" (V6.1), indicateur de frappe (V6.2)
 - ✅ **V7.0** — Transport broker LAN puis **transport `dual`** (broker primaire + p2p secours, par défaut ; voir « Transport : trois modes »)
 - ✅ **V7.1** — Surnom d'affichage éditable, propagé sur les 3 transports (voir « Étape actuelle »)
+- ✅ **V7.2** — Profil petit écran (`sm`, pi-desk 3.5") + watchdog Wi-Fi USB (récupération auto du dongle `rtl8xxxu`)
 
-Roadmap initiale livrée. Extension livrée : **transport broker LAN** puis
-**transport `dual`** (broker primaire + p2p secours, par défaut ; voir
-« Transport : trois modes ») puis **surnom d'affichage** (V7.1).
-Pistes encore ouvertes : accès hors domicile, multi-Pi par personne (labels de
-pièce). Chaque version est restée indépendamment utile.
+Roadmap initiale livrée, puis étendue (transport dual, surnom, profil petit
+écran + watchdog Wi-Fi). Pistes encore ouvertes : accès hors domicile, multi-Pi
+par personne (labels de pièce). Chaque version est restée indépendamment utile.
 
 ## Architecture cible (V1+)
 
@@ -156,7 +169,7 @@ Symétrique pair-à-pair : **code identique sur chaque Pi**. Chaque Pi expose sa
 
 ## Identité et destinataire
 
-- Chaque Pi a un propriétaire (`pi-aurel` = Aurel, `pi-slibar` = Slibar). Tout message qui sort d'un Pi est signé par son propriétaire.
+- Chaque Pi a un propriétaire (`pi-aurel` = Aurel, `pi-slibar` = Slibar, `pi-desk` = Desk). Tout message qui sort d'un Pi est signé par son propriétaire.
 - Les réponses atterrissent **sur le Pi de l'émetteur** (l'écran = réceptacle principal, la PWA = juste l'émetteur).
 - Naming des Pi peut inclure la pièce ("Slibar (salon)") quand il y aura plus d'un Pi par personne.
 
@@ -192,6 +205,9 @@ Affichage côté receveur : `Slibar · il y a 12s · encore 58min` en sous-titre
 ## Design — écran Pi (V2+)
 
 Format 5:3 (cible 800×480 sur écran officiel 7", testable sur HDMI quelconque).
+Un **profil `sm`** (V7.2) ré-adapte ce même stage aux panneaux physiquement
+minuscules comme le 3.5" de pi-desk (cibles tactiles agrandies). Cf.
+`docs/pi-desk-3.5-screen.md`.
 
 Palette dark/warm (ambiance veilleuse) :
 - Fond : `#1A1410`
