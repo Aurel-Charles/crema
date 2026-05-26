@@ -565,7 +565,7 @@
         var(--band-2), var(--band-1), var(--band-7), var(--band-6), var(--band-4));
       transform: scaleX(0);
       transform-origin: left center;
-      opacity: 0.9;
+      opacity: 1;          /* fully opaque — the message is hidden until it clears */
     }
     .msg.run .msg-sweep { animation: msg-sweep 820ms cubic-bezier(0.7, 0, 0.2, 1) both; }
     @keyframes msg-sweep {
@@ -1136,6 +1136,12 @@
         : '<div class="msg-rule"></div>';
       const header = `<header class="msg-top">${avatar}${sender}${ago}${rule}${quote}</header>`;
 
+      // Hold the whole reveal back until the opaque sweep has cleared the
+      // screen (its CSS animation runs 820ms), so the message only appears once
+      // the sweep is gone. word-in is `both`, so elements stay at opacity 0
+      // during this delay — nothing peeks through the sweep.
+      const revealDelay = MSG_FX.sweep ? 820 : 0;
+
       // Word-by-word cascade. Accent the last word in pink only when the
       // message is a question/exclamation (decision: accent on ?/!).
       const tokens = splitWords(text);
@@ -1143,11 +1149,11 @@
       const stagger = Math.min(WORD_STAGGER_MS, 1400 / Math.max(1, tokens.length));
       const wordsHtml = tokens.map((tok, i) => {
         const cls = (accentLast && i === tokens.length - 1) ? 'word accent' : 'word';
-        return `<span class="${cls}" style="animation-delay:${Math.round(i * stagger)}ms">${escapeHtml(tok)}</span>`;
+        return `<span class="${cls}" style="animation-delay:${revealDelay + Math.round(i * stagger)}ms">${escapeHtml(tok)}</span>`;
       }).join('');
       const body = `<div class="msg-body"><div class="msg-text">${wordsHtml}</div></div>`;
 
-      const replyStart = Math.round(tokens.length * stagger) + 200;
+      const replyStart = revealDelay + Math.round(tokens.length * stagger) + 200;
       const bar = replyBarHtml(replyStart);
       const hint = bar
         ? `<div class="msg-hint" style="animation-delay:${replyStart}ms">↓ réponds</div>`
