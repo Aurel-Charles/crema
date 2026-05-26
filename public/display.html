@@ -567,14 +567,14 @@
       transform-origin: left center;
       opacity: 1;          /* fully opaque — the message forms hidden behind it */
     }
-    .msg.run .msg-sweep { animation: msg-sweep 900ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+    .msg.run .msg-sweep { animation: msg-sweep 1100ms cubic-bezier(0.7, 0, 0.2, 1) both; }
     /* Curtain: enter (cover) → hold (the message + halos form behind it) →
      * retract (reveal the finished display). Origin flips under full cover. */
     @keyframes msg-sweep {
       0%   { transform: scaleX(0); transform-origin: left center; }   /* enter */
-      28%  { transform: scaleX(1); transform-origin: left center; }   /* fully covered */
-      60%  { transform: scaleX(1); transform-origin: left center; }   /* hold */
-      61%  { transform: scaleX(1); transform-origin: right center; }  /* flip under cover */
+      30%  { transform: scaleX(1); transform-origin: left center; }   /* fully covered */
+      66%  { transform: scaleX(1); transform-origin: left center; }   /* hold */
+      67%  { transform: scaleX(1); transform-origin: right center; }  /* flip under cover */
       100% { transform: scaleX(0); transform-origin: right center; }  /* retract → reveal */
     }
 
@@ -589,10 +589,10 @@
       pointer-events: none;
       opacity: 0;
     }
-    /* Start under the sweep cover (delay ≈ the JS revealDelay), so the rings
-     * are part of the state change the retracting sweep reveals. */
-    .msg.run .msg-halo { animation: msg-halo 2.6s ease-out infinite; animation-delay: 280ms; }
-    .msg.run .msg-halo.delay { animation-delay: 1580ms; }
+    /* Each halo's animation-delay is set inline (JS) = revealDelay [+ stagger],
+     * so on a question the rings form under the sweep cover, and on a reply
+     * (no sweep, revealDelay 0) they simply start at once. */
+    .msg.run .msg-halo { animation: msg-halo 2.6s ease-out infinite; }
     @keyframes msg-halo {
       0%   { opacity: 0.5; transform: scale(0.7); border-width: 2px; }
       100% { opacity: 0; transform: scale(2.6); border-width: 0.5px; }
@@ -1144,13 +1144,16 @@
         : '<div class="msg-rule"></div>';
       const header = `<header class="msg-top">${avatar}${sender}${ago}${rule}${quote}</header>`;
 
-      // Sequence: the sweep covers the screen, the message forms behind it
-      // (this word cascade + the halos), then the sweep retracts and reveals
-      // the finished display. So the reveal starts once the sweep is fully
-      // covering (~280ms into its 900ms run), not after it's gone. word-in is
-      // `both`, so elements stay at opacity 0 until then — nothing peeks out
-      // before the curtain is down. The halo delay in CSS tracks this value.
-      const revealDelay = MSG_FX.sweep ? 280 : 0;
+      // The sweep curtain is for incoming QUESTIONS only — a reply lands on the
+      // sender's own screen (they're already looking), so it shows plainly.
+      const useSweep = MSG_FX.sweep && !isReply;
+      // Sequence (questions): the sweep covers the screen, the message forms
+      // behind it (this word cascade + the halos), then the sweep retracts and
+      // reveals the finished display. So the reveal starts once the sweep is
+      // fully covering (~330ms into its 1100ms run), not after it's gone.
+      // word-in is `both`, so elements stay at opacity 0 until then — nothing
+      // peeks out before the curtain is down. Replies use revealDelay 0.
+      const revealDelay = useSweep ? 330 : 0;
 
       // Word-by-word cascade. Accent the last word in pink only when the
       // message is a question/exclamation (decision: accent on ?/!).
@@ -1172,10 +1175,13 @@
 
       // Message arrival FX layers (gated by MSG_FX). Halos sit behind the text
       // (early in DOM, no z-index); the sweep carries an explicit high z-index
-      // so it paints above it.
+      // so it paints above it. Each halo's delay = revealDelay [+ stagger] so
+      // the rings form under the sweep cover (or start at once on a reply).
       const halos = (MSG_FX.halos && avatar)
-        ? '<div class="msg-halo"></div><div class="msg-halo delay"></div>' : '';
-      const sweep = MSG_FX.sweep ? '<div class="msg-sweep"></div>' : '';
+        ? `<div class="msg-halo" style="animation-delay:${revealDelay}ms"></div>` +
+          `<div class="msg-halo delay" style="animation-delay:${revealDelay + 1300}ms"></div>`
+        : '';
+      const sweep = useSweep ? '<div class="msg-sweep"></div>' : '';
       const furniture =
         halos +
         '<div class="msg-spine"></div><div class="msg-glow"></div>' +
