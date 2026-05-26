@@ -550,36 +550,42 @@
     }
 
     /* ===== Message arrival FX (from "Message Arrival Lab") =====
-     * On arrival: the rainbow spine sweeps across the screen, then accent rings
-     * ripple out from the sender avatar while the message is shown. Each layer
-     * is gated by a flag in MSG_FX (see script) and suppressed under
-     * prefers-reduced-motion. */
+     * On arrival of a QUESTION: an opaque rainbow curtain sweeps across, the
+     * message swaps in behind it, then it retracts to reveal. While the message
+     * is shown, accent rings ripple from the sender avatar. Gated by MSG_FX
+     * (see script) and suppressed under prefers-reduced-motion. */
 
-    /* Rainbow sweep — full-height band wipes left→right then collapses right. */
-    .msg-sweep {
+    /* Arrival curtain — lives in the stage (sibling of #screen), so it can
+     * cover the idle screen BEFORE the message swaps in behind it. Sequence:
+     * enter (cover) → hold (message renders behind, driven by JS) → retract
+     * (reveal). The origin flips under full cover so it leaves to the right. */
+    .msg-curtain {
       position: absolute;
       inset: 0;
-      z-index: 70;         /* above the reply-bar (z60) so it covers everything */
+      z-index: 80;         /* above #screen and its reply-bar */
       pointer-events: none;
       background: linear-gradient(180deg,
         var(--band-2), var(--band-1), var(--band-7), var(--band-6), var(--band-4));
       transform: scaleX(0);
       transform-origin: left center;
-      opacity: 1;          /* fully opaque — the message forms hidden behind it */
+      opacity: 0;
     }
-    .msg.run .msg-sweep { animation: msg-sweep 1100ms cubic-bezier(0.7, 0, 0.2, 1) both; }
-    /* Curtain: enter (cover) → hold (the message + halos form behind it) →
-     * retract (reveal the finished display). Origin flips under full cover. */
-    @keyframes msg-sweep {
+    .msg-curtain.go {
+      opacity: 1;
+      animation: msg-curtain 1200ms cubic-bezier(0.7, 0, 0.2, 1) forwards;
+    }
+    @keyframes msg-curtain {
       0%   { transform: scaleX(0); transform-origin: left center; }   /* enter */
-      30%  { transform: scaleX(1); transform-origin: left center; }   /* fully covered */
-      66%  { transform: scaleX(1); transform-origin: left center; }   /* hold */
-      67%  { transform: scaleX(1); transform-origin: right center; }  /* flip under cover */
+      30%  { transform: scaleX(1); transform-origin: left center; }   /* covered (JS swaps here) */
+      65%  { transform: scaleX(1); transform-origin: left center; }   /* hold */
+      66%  { transform: scaleX(1); transform-origin: right center; }  /* flip under cover */
       100% { transform: scaleX(0); transform-origin: right center; }  /* retract → reveal */
     }
 
     /* Avatar halos — accent rings ripple out from the sender avatar, looping.
-     * Anchored on the 32px avatar at (64, 26) in the message header. */
+     * Anchored on the 32px avatar at (64, 26) in the message header. They run
+     * on .run, i.e. when the message renders (behind the curtain on a question,
+     * at once on a reply). */
     .msg-halo {
       position: absolute;
       left: 56px; top: 18px;
@@ -589,17 +595,15 @@
       pointer-events: none;
       opacity: 0;
     }
-    /* Each halo's animation-delay is set inline (JS) = revealDelay [+ stagger],
-     * so on a question the rings form under the sweep cover, and on a reply
-     * (no sweep, revealDelay 0) they simply start at once. */
     .msg.run .msg-halo { animation: msg-halo 2.6s ease-out infinite; }
+    .msg.run .msg-halo.delay { animation-delay: 1.3s; }
     @keyframes msg-halo {
       0%   { opacity: 0.5; transform: scale(0.7); border-width: 2px; }
       100% { opacity: 0; transform: scale(2.6); border-width: 0.5px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .msg-sweep, .msg-halo { display: none !important; }
+      .msg-curtain, .msg-halo { display: none !important; }
     }
 
     /* Shortcuts (V5) — grille 2 colonnes ancrée sur le bord droit, sous le
@@ -913,6 +917,10 @@
 
   <main id="screen"></main>
 
+  <!-- Arrival curtain — covers the stage so a question's message can swap in
+       behind it, then retracts to reveal (see playCurtain in the script). -->
+  <div id="msg-curtain" class="msg-curtain"></div>
+
   <div id="server-status" class="server-status"></div>
 
   <footer id="shortcuts-bar"></footer>
@@ -1098,6 +1106,26 @@
       maybeDrainNext();
     }
 
+    // ===== Arrival curtain =====
+    // The curtain (#msg-curtain, a sibling of #screen in the stage) covers the
+    // current screen, fires onCovered() at full cover so the message can swap
+    // in behind it, then retracts to reveal. Cover/total must match the CSS
+    // keyframe (cover at 30% of 1200ms).
+    const msgCurtain = document.getElementById('msg-curtain');
+    const CURTAIN_COVER_MS = 360;
+    function prefersReducedMotion() {
+      return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+    function playCurtain(onCovered) {
+      msgCurtain.classList.remove('go');
+      void msgCurtain.offsetWidth;            // restart the animation cleanly
+      msgCurtain.classList.add('go');
+      msgCurtain.addEventListener('animationend', () => {
+        msgCurtain.classList.remove('go');
+      }, { once: true });
+      setTimeout(onCovered, CURTAIN_COVER_MS);
+    }
+
     function showMessage(data) {
       mode = 'message';
       renderDestBar();  // hides the global recipient bar while a message shows
@@ -1106,21 +1134,39 @@
       const receivedAt = data.arrivedAt ?? Date.now();
       const expiresAtMs = data.expiresAt ? Date.parse(data.expiresAt) : null;
       currentMsg = { ...data, receivedAt, expiresAtMs };
-      renderMessage();
-      renderShortcuts(); // will hide while in message mode
+      const thisMsg = currentMsg;
 
-      if (resetTimer) clearTimeout(resetTimer);
-      const ttl = expiresAtMs
-        ? Math.max(MIN_DISPLAY_MS, expiresAtMs - Date.now())
-        : (data.isReply ? REPLY_DISPLAY_MS : DEFAULT_DISPLAY_MS);
-      resetTimer = setTimeout(leaveMessage, ttl);
+      // The actual swap: render the message + arm its display timer. For a
+      // question with the curtain, this runs *behind* the cover (so the
+      // idle→message swap is hidden); otherwise it runs straight away.
+      const reveal = () => {
+        // Bail if we were dismissed during the curtain cover (rare tap window).
+        if (mode !== 'message' || currentMsg !== thisMsg) return;
+        renderMessage();
+        renderShortcuts(); // will hide while in message mode
 
-      if (expiresAtMs) startProgressAnimation(ttl);
+        if (resetTimer) clearTimeout(resetTimer);
+        const ttl = expiresAtMs
+          ? Math.max(MIN_DISPLAY_MS, expiresAtMs - Date.now())
+          : (data.isReply ? REPLY_DISPLAY_MS : DEFAULT_DISPLAY_MS);
+        resetTimer = setTimeout(leaveMessage, ttl);
 
-      // Tell the original sender we just displayed their message (V6.1).
-      // Replies don't carry an id over the wire, skip them.
-      if (data.id && data.fromInstanceId && !data.isReply) {
-        socket.emit('msg:read', { id: data.id, fromInstanceId: data.fromInstanceId });
+        if (expiresAtMs) startProgressAnimation(ttl);
+
+        // Tell the original sender we just displayed their message (V6.1).
+        // Replies don't carry an id over the wire, skip them.
+        if (data.id && data.fromInstanceId && !data.isReply) {
+          socket.emit('msg:read', { id: data.id, fromInstanceId: data.fromInstanceId });
+        }
+      };
+
+      // Curtain reveal for incoming QUESTIONS only: it covers the idle screen
+      // first, the message swaps in behind it, then it retracts to reveal.
+      // Replies (and reduced-motion) skip it and render plainly.
+      if (MSG_FX.sweep && !data.isReply && !prefersReducedMotion()) {
+        playCurtain(reveal);
+      } else {
+        reveal();
       }
     }
 
@@ -1144,49 +1190,35 @@
         : '<div class="msg-rule"></div>';
       const header = `<header class="msg-top">${avatar}${sender}${ago}${rule}${quote}</header>`;
 
-      // The sweep curtain is for incoming QUESTIONS only — a reply lands on the
-      // sender's own screen (they're already looking), so it shows plainly.
-      const useSweep = MSG_FX.sweep && !isReply;
-      // Sequence (questions): the sweep covers the screen, the message forms
-      // behind it (this word cascade + the halos), then the sweep retracts and
-      // reveals the finished display. So the reveal starts once the sweep is
-      // fully covering (~330ms into its 1100ms run), not after it's gone.
-      // word-in is `both`, so elements stay at opacity 0 until then — nothing
-      // peeks out before the curtain is down. Replies use revealDelay 0.
-      const revealDelay = useSweep ? 330 : 0;
-
       // Word-by-word cascade. Accent the last word in pink only when the
-      // message is a question/exclamation (decision: accent on ?/!).
+      // message is a question/exclamation (decision: accent on ?/!). For a
+      // question this whole render runs behind the curtain (see showMessage),
+      // so the cascade plays under the cover and is revealed by the retract.
       const tokens = splitWords(text);
       const accentLast = /[?!]\s*$/.test(text);
       const stagger = Math.min(WORD_STAGGER_MS, 1400 / Math.max(1, tokens.length));
       const wordsHtml = tokens.map((tok, i) => {
         const cls = (accentLast && i === tokens.length - 1) ? 'word accent' : 'word';
-        return `<span class="${cls}" style="animation-delay:${revealDelay + Math.round(i * stagger)}ms">${escapeHtml(tok)}</span>`;
+        return `<span class="${cls}" style="animation-delay:${Math.round(i * stagger)}ms">${escapeHtml(tok)}</span>`;
       }).join('');
       const body = `<div class="msg-body"><div class="msg-text">${wordsHtml}</div></div>`;
 
-      const replyStart = revealDelay + Math.round(tokens.length * stagger) + 200;
+      const replyStart = Math.round(tokens.length * stagger) + 200;
       const bar = replyBarHtml(replyStart);
       const hint = bar
         ? `<div class="msg-hint" style="animation-delay:${replyStart}ms">↓ réponds</div>`
         : '';
       const foot = `<footer class="msg-foot">${hint}${bar}</footer>`;
 
-      // Message arrival FX layers (gated by MSG_FX). Halos sit behind the text
-      // (early in DOM, no z-index); the sweep carries an explicit high z-index
-      // so it paints above it. Each halo's delay = revealDelay [+ stagger] so
-      // the rings form under the sweep cover (or start at once on a reply).
+      // Halos ripple from the sender avatar while the message is shown. The
+      // arrival sweep is the separate #msg-curtain (see showMessage), not part
+      // of #screen, so it can cover the idle screen before this renders.
       const halos = (MSG_FX.halos && avatar)
-        ? `<div class="msg-halo" style="animation-delay:${revealDelay}ms"></div>` +
-          `<div class="msg-halo delay" style="animation-delay:${revealDelay + 1300}ms"></div>`
-        : '';
-      const sweep = useSweep ? '<div class="msg-sweep"></div>' : '';
+        ? '<div class="msg-halo"></div><div class="msg-halo delay"></div>' : '';
       const furniture =
         halos +
         '<div class="msg-spine"></div><div class="msg-glow"></div>' +
-        '<div class="msg-watermark">crema · message</div>' +
-        sweep;
+        '<div class="msg-watermark">crema · message</div>';
 
       screen.className = 'msg';
       screen.innerHTML = `${furniture}${header}${body}${foot}`;
