@@ -52,8 +52,16 @@ ansible-playbook playbook.yml --ask-become-pass --check --diff
 # One Pi only
 ansible-playbook playbook.yml --ask-become-pass --limit pi-desk
 
-# Update code only on an already-provisioned Pi (git pull + npm install)
+# Update code on an already-provisioned Pi (git pull + npm install). When the
+# code actually changed, this auto-restarts the Node server AND reloads the
+# Chromium kiosk, so both backend and frontend edits take effect.
 ansible-playbook playbook.yml --ask-become-pass --tags deploy
+
+# Force a restart + kiosk reload without pulling (debug, or after a manual edit)
+ansible-playbook playbook.yml --ask-become-pass --tags reload
+
+# Reboot the Pis, one at a time (opt-in — never runs on a normal deploy)
+ansible-playbook playbook.yml --ask-become-pass --tags reboot --limit pi-desk
 
 # Just one slice: --tags service | transport | display | watchdog
 ansible-playbook playbook.yml --ask-become-pass --tags watchdog
@@ -79,6 +87,7 @@ ansible-playbook playbook.yml --ask-become-pass --tags watchdog
 - The watchdog driver/iface default to `rtl8xxxu` / `wlan0`; override per group or host
   with `watchdog_driver=` / `watchdog_iface=`.
 - Changing a Pi's `crema_screen` profile only takes effect after the Chromium kiosk
-  relaunches (the profile is read by `start-display.sh`, not the server). The playbook
-  can't restart it cleanly — the kiosk isn't a systemd unit. Relaunch with `pkill chromium`
-  (the `start-display.sh` loop reopens it) or reboot.
+  relaunches (the profile is read by `start-display.sh`, not the server). The kiosk
+  isn't a systemd unit, so it's reloaded with `pkill -f chromium` — the
+  `start-display.sh` loop reopens it ~3s later. A `--tags deploy` does this for you
+  when the code changed; otherwise force it with `--tags reload` (or `--tags reboot`).
