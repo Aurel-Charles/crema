@@ -28,7 +28,8 @@ sudo reboot   # or: ssh <user>@pi-<name>.local sudo reboot — to land in the ki
 ```
 
 See [`ansible/README.md`](../ansible/README.md) for prerequisites, tags
-(`deploy` / `service` / `transport` / `display` / `watchdog`) and broker pinning.
+(`deploy` / `service` / `transport` / `display` / `watchdog` / `reload` / `reboot`)
+and broker pinning.
 The manual steps below are the fallback if you'd rather not use Ansible.
 
 ## Manual one-time install (alternative)
@@ -73,7 +74,11 @@ ssh <user>@pi-<name>.local "cd ~/crema && git pull && sudo systemctl restart cre
 ```
 
 Or, with Ansible: `ansible-playbook playbook.yml --ask-become-pass --tags deploy`
-(git pull + npm install + restart, on every Pi or one via `--limit`).
+(git pull + npm install, on every Pi or one via `--limit`). When the code
+actually changed, `deploy` then restarts the Node server **and** reloads the
+Chromium kiosk, so both backend and frontend edits take effect. To force those
+without a pull use `--tags reload`; to reboot the Pis one at a time use
+`--tags reboot` (opt-in — never runs on a normal deploy).
 
 If `package.json` changed, add `&& npm install` before the restart.
 On 32-bit Pi OS (armv7), `better-sqlite3` compiles from source on
