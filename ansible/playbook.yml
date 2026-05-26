@@ -8,6 +8,7 @@
 # Idempotent: re-running only changes what drifted. Tags let you scope a re-run:
 #   --tags deploy   git pull + npm install (e.g. to push a code update)
 #   --tags service  only the systemd server unit
+#   --tags transport  only the broker pin drop-in (hosts with crema_broker_url)
 #   --tags display  only the Chromium kiosk autostart
 #   --tags watchdog  only the USB Wi-Fi watchdog (wifi_dongle group)
 
@@ -130,6 +131,33 @@
         enabled: true
         state: started
         daemon_reload: true
+
+    # Optional broker pin (dual mode, p2p fallback) — Ansible equivalent of
+    # pin-broker.sh. Writes the SAME drop-in, so it's a single source and
+    # reset-transport.sh still undoes it. Additive: only managed when
+    # crema_broker_url is set, never auto-removed — a default run won't clobber
+    # a hand-pinned Pi (e.g. pi-aurel on the cloud broker). To pin a host, set
+    # crema_broker_url (and optionally crema_broker_token) in the inventory.
+    - name: Ensure systemd drop-in directory exists (broker pin)
+      become: true
+      tags: [transport]
+      ansible.builtin.file:
+        path: /etc/systemd/system/crema.service.d
+        state: directory
+        mode: "0755"
+      when: crema_broker_url | default('') | length > 0
+
+    - name: Pin broker URL (dual mode) via systemd drop-in
+      become: true
+      tags: [transport]
+      ansible.builtin.template:
+        src: transport.conf.j2
+        dest: /etc/systemd/system/crema.service.d/transport.conf
+        mode: "0644"
+      when: crema_broker_url | default('') | length > 0
+      notify:
+        - Reload systemd
+        - Restart crema
 
     # install-pi.sh step 2: Chromium kiosk autostart (user scope, no sudo).
     - name: Ensure autostart directory exists
