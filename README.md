@@ -51,8 +51,9 @@ screen.
 
 | Task | Command |
 |------|---------|
-| Set up a new Pi | see [`docs/setup.md`](./docs/setup.md) |
-| Update a Pi | `cd ~/crema && git pull && sudo systemctl restart crema` |
+| Provision a Pi (recommended) | `cd ansible && ansible-playbook playbook.yml --ask-become-pass --limit pi-<name>` ([ansible](./ansible/README.md)) |
+| Set up a Pi by hand | see [`docs/setup.md`](./docs/setup.md) |
+| Update a Pi | `cd ~/crema && git pull && sudo systemctl restart crema` (or `ansible-playbook … --tags deploy`) |
 | Reload the display only | `pkill -f chromium` (the kiosk auto-restarts) |
 | Switch transport | `./pin-broker.sh` · `./reset-transport.sh` · `./disable-broker.sh` ([transport](./docs/transport.md)) |
 | Run the broker relay | `cd broker && ./install-broker.sh` ([transport](./docs/transport.md)) |
@@ -61,6 +62,7 @@ screen.
 
 ## Docs
 
+- [`ansible/README.md`](./ansible/README.md) — one-shot Pi provisioning from the Mac (Node + clone + service + watchdog + broker pin), the recommended setup path.
 - [`setup.md`](./docs/setup.md) — install a new Pi, deploy updates, Docker image.
 - [`transport.md`](./docs/transport.md) — the three transport modes, switching, running the broker relay.
 - [`broker-protocol.md`](./docs/broker-protocol.md) — the broker wire protocol (register / deliver / presence).
