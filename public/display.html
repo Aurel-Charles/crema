@@ -549,6 +549,118 @@
       #screen.exiting .msg-text .word { animation: none !important; opacity: 0 !important; }
     }
 
+    /* ===== Message arrival FX (from "Message Arrival Lab") =====
+     * On arrival: the rainbow spine sweeps across the screen + a soft accent
+     * edge-glow flashes on. While the message is shown: sustained micro-motion
+     * (spine breathes, avatar halos, warm background drift, TTL sparkle) keeps
+     * the eye engaged without shouting. Each layer is gated by a flag in MSG_FX
+     * (see script). All of it is suppressed under prefers-reduced-motion. */
+
+    /* Rainbow sweep — full-height band wipes left→right then collapses right. */
+    .msg-sweep {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      pointer-events: none;
+      background: linear-gradient(180deg,
+        var(--band-2), var(--band-1), var(--band-7), var(--band-6), var(--band-4));
+      transform: scaleX(0);
+      transform-origin: left center;
+      opacity: 0.9;
+    }
+    .msg.run .msg-sweep { animation: msg-sweep 820ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+    @keyframes msg-sweep {
+      0%   { transform: scaleX(0); transform-origin: left center; }
+      45%  { transform: scaleX(1); transform-origin: left center; }
+      55%  { transform: scaleX(1); transform-origin: right center; }
+      100% { transform: scaleX(0); transform-origin: right center; }
+    }
+
+    /* Edge glow — soft accent frame fades in on arrival, stays faint while shown. */
+    .msg-edge-glow {
+      position: absolute;
+      inset: 0;
+      z-index: 31;
+      pointer-events: none;
+      opacity: 0;
+    }
+    .msg.run .msg-edge-glow { animation: msg-edge-in 1000ms ease-out 200ms forwards; }
+    @keyframes msg-edge-in {
+      0%   { opacity: 0; box-shadow: inset 0 0 0 0 var(--crema-accent); }
+      35%  { opacity: 1; box-shadow: inset 0 0 0 4px var(--crema-accent),
+                          inset 0 0 90px 8px color-mix(in srgb, var(--crema-accent) 38%, transparent); }
+      100% { opacity: 0.5; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--crema-accent) 70%, transparent),
+                          inset 0 0 64px 6px color-mix(in srgb, var(--crema-accent) 20%, transparent); }
+    }
+
+    /* Spine breathe — the left rainbow spine gently pulses width + brightness. */
+    .msg-spine.breathe { animation: msg-spine-breathe 3.4s ease-in-out infinite; }
+    @keyframes msg-spine-breathe {
+      0%, 100% { width: 14px; filter: brightness(1) saturate(1); }
+      50%      { width: 22px; filter: brightness(1.22) saturate(1.35); }
+    }
+
+    /* Avatar halos — accent rings ripple out from the sender avatar, looping.
+     * Anchored on the 32px avatar at (64, 26) in the message header. */
+    .msg-halo {
+      position: absolute;
+      left: 56px; top: 18px;
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      border: 2px solid var(--crema-accent);
+      pointer-events: none;
+      opacity: 0;
+      animation: msg-halo 2.6s ease-out infinite;
+    }
+    .msg-halo.delay { animation-delay: 1.3s; }
+    @keyframes msg-halo {
+      0%   { opacity: 0.5; transform: scale(0.7); border-width: 2px; }
+      100% { opacity: 0; transform: scale(2.6); border-width: 0.5px; }
+    }
+
+    /* Background drift — warm radial glows orbit slowly behind the text. */
+    .msg-bg-drift {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(34% 34% at 72% 26%, color-mix(in srgb, var(--band-2) 42%, transparent), transparent 70%),
+        radial-gradient(28% 28% at 24% 76%, color-mix(in srgb, var(--band-7) 32%, transparent), transparent 70%);
+      animation: msg-bg-drift 11s ease-in-out infinite alternate;
+    }
+    @keyframes msg-bg-drift {
+      0%   { transform: translate(0, 0) rotate(0deg); }
+      100% { transform: translate(3%, -2%) rotate(7deg); }
+    }
+
+    /* TTL sparkle — a bright point rides the depleting expiry bar (V4 messages).
+     * overflow:visible lets the glow show past the 2px track. */
+    .msg-rule.sparkle { overflow: visible; }
+    .msg-rule.sparkle::after {
+      content: "";
+      position: absolute;
+      top: 50%; left: 0;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 12px 3px var(--crema-accent);
+      transform: translateY(-50%);
+      animation: msg-sparkle 1.8s ease-in-out infinite;
+    }
+    @keyframes msg-sparkle {
+      0%, 100% { left: 0%; opacity: 0; }
+      12%      { opacity: 1; }
+      50%      { left: 96%; }
+      88%      { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .msg-spine.breathe, .msg-bg-drift { animation: none !important; }
+      .msg-sweep, .msg-edge-glow, .msg-halo { display: none !important; }
+      .msg-rule.sparkle::after { display: none !important; }
+    }
+
     /* Shortcuts (V5) — grille 2 colonnes ancrée sur le bord droit, sous le
      * corner glow, pour dégager l'horloge à gauche. Auto-flow : 4 raccourcis
      * → 2×2, jusqu'à 8 → 2×4. La scène scale en bloc, donc un écran plus petit
@@ -931,6 +1043,20 @@
     fitStage();
     window.addEventListener('resize', fitStage);
 
+    // ===== Message arrival FX (from "Message Arrival Lab") =====
+    // Subtle attention layer for an incoming message: a rainbow sweep on
+    // arrival, then sustained micro-motion while it's shown. Each flag is
+    // independent — flip to false to drop that layer. The CSS lives in the
+    // <style> above and is fully suppressed under prefers-reduced-motion.
+    const MSG_FX = {
+      sweep: true,        // rainbow spine wipes across the screen on arrival
+      edgeGlow: true,     // soft accent frame flashes on, then stays faint
+      railBreathe: true,  // the left rainbow spine pulses width + brightness
+      halos: true,        // accent rings ripple out from the sender avatar
+      bgDrift: true,      // warm radial glows orbit slowly behind the text
+      sparkle: true,      // bright point rides the TTL bar (expiring messages only)
+    };
+
     const DEFAULT_DISPLAY_MS = 30_000;
     const REPLY_DISPLAY_MS = 10_000;
     const MIN_DISPLAY_MS = 2_000;
@@ -1074,8 +1200,10 @@
         ? `<div class="msg-quote">«&nbsp;${escapeHtml(truncate(replyToText, REPLY_CONTEXT_MAX_CHARS))}&nbsp;»</div>`
         : '';
       // The header rule carries the TTL bar (depletes) when there's an expiry.
+      // When present, the sparkle FX rides this same bar.
+      const ruleCls = (currentMsg.expiresAtMs && MSG_FX.sparkle) ? 'msg-rule sparkle' : 'msg-rule';
       const rule = currentMsg.expiresAtMs
-        ? '<div class="msg-rule"><div class="msg-rule-fill"></div></div>'
+        ? `<div class="${ruleCls}"><div class="msg-rule-fill"></div></div>`
         : '<div class="msg-rule"></div>';
       const header = `<header class="msg-top">${avatar}${sender}${ago}${rule}${quote}</header>`;
 
@@ -1097,9 +1225,20 @@
         : '';
       const foot = `<footer class="msg-foot">${hint}${bar}</footer>`;
 
+      // Message arrival FX layers (gated by MSG_FX). Order matters: bg-drift
+      // and halos sit behind the text (early in DOM, no z-index); the sweep and
+      // edge-glow carry an explicit high z-index so they paint above it.
+      const bgDrift = MSG_FX.bgDrift ? '<div class="msg-bg-drift"></div>' : '';
+      const halos = (MSG_FX.halos && avatar)
+        ? '<div class="msg-halo"></div><div class="msg-halo delay"></div>' : '';
+      const spineCls = MSG_FX.railBreathe ? 'msg-spine breathe' : 'msg-spine';
+      const sweep = MSG_FX.sweep ? '<div class="msg-sweep"></div>' : '';
+      const edgeGlow = MSG_FX.edgeGlow ? '<div class="msg-edge-glow"></div>' : '';
       const furniture =
-        '<div class="msg-spine"></div><div class="msg-glow"></div>' +
-        '<div class="msg-watermark">crema · message</div>';
+        bgDrift + halos +
+        `<div class="${spineCls}"></div><div class="msg-glow"></div>` +
+        '<div class="msg-watermark">crema · message</div>' +
+        sweep + edgeGlow;
 
       screen.className = 'msg';
       screen.innerHTML = `${furniture}${header}${body}${foot}`;
