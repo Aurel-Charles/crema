@@ -109,6 +109,10 @@ pin-broker.sh          transport switch: dual + broker pinned to a URL (p2p fall
 reset-transport.sh     transport switch: back to default dual + broker auto-discovery
 disable-broker.sh      transport switch: force pure p2p (mDNS only)
 enable-broker.sh       transport switch: force pure broker (debug, no fallback)
+ansible/               one-shot provisioning from the Mac (idempotent install-pi.sh equivalent + Node bootstrap)
+  playbook.yml         install play + USB Wi-Fi watchdog play
+  inventory.ini        the Pis: per-Pi user, screen profile, optional broker pin
+  README.md            usage, tags, prerequisites
 broker/
   server.js            stateless LAN relay: owner→socket registry + deliver routing + /health
   install-broker.sh    one-shot broker setup on a dedicated box (crema-broker.service)
