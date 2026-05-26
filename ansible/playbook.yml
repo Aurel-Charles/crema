@@ -1,0 +1,185 @@
+---
+# Crema — Ansible equivalent of install-pi.sh (+ optional deploy & Wi-Fi watchdog).
+#
+#   ansible-playbook playbook.yml --ask-become-pass
+#
+# Idempotent: re-running only changes what drifted. Tags let you scope a run:
+#   --tags deploy   git pull + npm install (off by default — see note below)
+#   --tags service  only the systemd server unit
+#   --tags display  only the Chromium kiosk autostart
+#   --tags watchdog  only the USB Wi-Fi watchdog (wifi_dongle group)
+
+- name: Crema — install on each Pi
+  hosts: crema
+  gather_facts: true
+  vars:
+    # Extra Environment= lines baked into crema.service (e.g. pin a broker).
+    # Empty by default: config.js derives OWNER from hostname, TRANSPORT=dual.
+    #   crema_env: { CREMA_TRANSPORT: broker, CREMA_BROKER_URL: "ws://10.0.0.5:4000" }
+    crema_env: {}
+
+  tasks:
+    # install-pi.sh steps 4 & 5: apt packages.
+    - name: Install system packages (build tools + emoji font)
+      become: true
+      ansible.builtin.apt:
+        name:
+          - git 
+          - build-essential   # better-sqlite3 / mdns have no armv7 prebuild
+          - python3
+          - fonts-noto-color-emoji
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # --- Optional deploy (out of install-pi.sh's scope; assumes Node/nvm present) ---
+    - name: Clone or update the Crema repo
+      tags: [never, deploy]
+      ansible.builtin.git:
+        repo: "{{ crema_repo }}"
+        dest: "{{ crema_dir }}"
+        version: "{{ crema_branch }}"
+        update: true
+
+    - name: Install npm dependencies (compiles native modules on the Pi)
+      tags: [never, deploy]
+      ansible.builtin.shell: |
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        npm install --no-audit --no-fund
+      args:
+        chdir: "{{ crema_dir }}"
+        executable: /bin/bash
+      register: npm_install
+      changed_when: >-
+        ('added' in npm_install.stdout) or ('changed' in npm_install.stdout)
+        or ('removed' in npm_install.stdout)
+      notify: Restart crema
+
+    # install-pi.sh step (chmod): make the launchers executable.
+    - name: Make launcher scripts executable
+      ansible.builtin.file:
+        path: "{{ crema_dir }}/{{ item }}"
+        mode: "0755"
+      loop:
+        - start.sh
+        - start-display.sh
+
+    # V7.2 per-Pi screen profile (data/screen-profile, gitignored).
+    - name: Set screen profile
+      ansible.builtin.copy:
+        dest: "{{ crema_dir }}/data/screen-profile"
+        content: "{{ crema_screen }}\n"
+        mode: "0644"
+      when: crema_screen | default('') | length > 0
+
+    # install-pi.sh step 1: systemd unit for the Node server.
+    - name: Install crema.service
+      become: true
+      tags: [service]
+      ansible.builtin.template:
+        src: crema.service.j2
+        dest: /etc/systemd/system/crema.service
+        mode: "0644"
+      notify:
+        - Reload systemd
+        - Restart crema
+
+    - name: Enable and start crema.service
+      become: true
+      tags: [service]
+      ansible.builtin.systemd:
+        name: crema.service
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # install-pi.sh step 2: Chromium kiosk autostart (user scope, no sudo).
+    - name: Ensure autostart directory exists
+      tags: [display]
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.config/autostart"
+        state: directory
+        mode: "0755"
+
+    - name: Install crema-display.desktop autostart entry
+      tags: [display]
+      ansible.builtin.template:
+        src: crema-display.desktop.j2
+        dest: "{{ ansible_env.HOME }}/.config/autostart/crema-display.desktop"
+        mode: "0644"
+
+    # install-pi.sh step 3: disable screen blanking (X11 + Wayland).
+    - name: Check for raspi-config
+      ansible.builtin.command: which raspi-config
+      register: raspi_config
+      changed_when: false
+      failed_when: false
+
+    - name: Disable screen blanking
+      become: true
+      ansible.builtin.command: raspi-config nonint do_blanking 1
+      register: blanking
+      changed_when: false
+      when: raspi_config.rc == 0
+
+  handlers:
+    - name: Reload systemd
+      become: true
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart crema
+      become: true
+      ansible.builtin.systemd:
+        name: crema.service
+        state: restarted
+
+
+# Equivalent of wifi-watchdog-on.sh — only on Pis with a USB Wi-Fi dongle.
+- name: Crema — USB Wi-Fi watchdog (V7.2)
+  hosts: wifi_dongle
+  gather_facts: false
+  tags: [watchdog]
+  vars:
+    watchdog_iface: wlan0
+    watchdog_driver: rtl8xxxu
+
+  tasks:
+    - name: Install watchdog worker script
+      become: true
+      ansible.builtin.template:
+        src: wifi-watchdog.sh.j2
+        dest: /usr/local/bin/wifi-watchdog.sh
+        mode: "0755"
+      notify: Restart wifi-watchdog
+
+    - name: Install wifi-watchdog.service
+      become: true
+      ansible.builtin.template:
+        src: wifi-watchdog.service.j2
+        dest: /etc/systemd/system/wifi-watchdog.service
+        mode: "0644"
+      notify:
+        - Reload systemd
+        - Restart wifi-watchdog
+
+    - name: Enable and start wifi-watchdog.service
+      become: true
+      ansible.builtin.systemd:
+        name: wifi-watchdog.service
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Reload systemd
+      become: true
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart wifi-watchdog
+      become: true
+      ansible.builtin.systemd:
+        name: wifi-watchdog.service
+        state: restarted

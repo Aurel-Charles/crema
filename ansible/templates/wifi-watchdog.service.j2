@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Wi-Fi watchdog (recover a hung USB Wi-Fi dongle)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wifi-watchdog.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
