@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Crema messenger
+After=network-online.target avahi-daemon.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ ansible_user }}
+WorkingDirectory={{ crema_dir }}
+ExecStart=/bin/bash {{ crema_dir }}/start.sh
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+{% for key, value in crema_env.items() %}
+Environment={{ key }}={{ value }}
+{% endfor %}
+
+[Install]
+WantedBy=multi-user.target

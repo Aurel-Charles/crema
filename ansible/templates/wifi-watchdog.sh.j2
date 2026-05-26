@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+# Recover a hung USB Wi-Fi dongle (rtl8xxxu / RTL8192EU) without a physical
+# replug: ping the gateway and, on sustained loss, reload the kernel module.
+# See docs/usb-wifi-dongle.md.
+set -u
+IFACE="{{ watchdog_iface }}"; DRIVER="{{ watchdog_driver }}"
+CHECK_INTERVAL=30; FAIL_THRESHOLD=3; PING_TIMEOUT=5
+log() { echo "$(date '+%F %T') wifi-watchdog: $*"; }
+gateway() { ip route show default dev "$IFACE" 2>/dev/null | awk '/default/{print $3; exit}'; }
+alive() { local gw; gw="$(gateway)"; [ -n "$gw" ] && ping -c1 -W"$PING_TIMEOUT" "$gw" >/dev/null 2>&1; }
+soft_recover() {
+  log "soft recovery: nmcli reconnect $IFACE"
+  nmcli device disconnect "$IFACE" >/dev/null 2>&1; sleep 2
+  nmcli device connect "$IFACE" >/dev/null 2>&1
+}
+hard_recover() {
+  log "hard recovery: reloading kernel module $DRIVER"
+  modprobe -r "$DRIVER" 2>/dev/null; sleep 3; modprobe "$DRIVER" 2>/dev/null; sleep 5
+  nmcli device connect "$IFACE" >/dev/null 2>&1
+}
+log "started (iface=$IFACE driver=$DRIVER interval=${CHECK_INTERVAL}s threshold=$FAIL_THRESHOLD)"
+fails=0
+while true; do
+  if alive; then
+    [ "$fails" -gt 0 ] && log "link OK again"; fails=0
+  else
+    fails=$((fails+1)); log "no connectivity, fail $fails/$FAIL_THRESHOLD"
+    if [ "$fails" -ge "$FAIL_THRESHOLD" ]; then
+      soft_recover; sleep 8
+      if alive; then log "recovered via soft reconnect"
+      else hard_recover; sleep 8
+        if alive; then log "recovered via module reload"
+        else log "STILL DOWN after module reload — likely hard USB disconnect (see docs: DKMS plan B)"; fi
+      fi
+      fails=0
+    fi
+  fi
+  sleep "$CHECK_INTERVAL"
+done
