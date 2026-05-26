@@ -29,6 +29,7 @@
           - git
           - build-essential   # better-sqlite3 / mdns have no armv7 prebuild
           - python3
+          - libavahi-compat-libdnssd-dev  # dns_sd.h — mdns native build needs it
           - curl              # nvm installs itself over curl
           - ca-certificates
           - fonts-noto-color-emoji
