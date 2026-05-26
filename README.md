@@ -53,8 +53,9 @@ screen.
 |------|---------|
 | Provision a Pi (recommended) | `cd ansible && ansible-playbook playbook.yml --ask-become-pass --limit pi-<name>` ([ansible](./ansible/README.md)) |
 | Set up a Pi by hand | see [`docs/setup.md`](./docs/setup.md) |
-| Update a Pi | `cd ~/crema && git pull && sudo systemctl restart crema` (or `ansible-playbook … --tags deploy`) |
-| Reload the display only | `pkill -f chromium` (the kiosk auto-restarts) |
+| Update a Pi | `cd ~/crema && git pull && sudo systemctl restart crema` (or `ansible-playbook … --tags deploy` — restarts the server and reloads the kiosk when the code changed) |
+| Reload the display only | `pkill -f chromium` (the kiosk auto-restarts), or `ansible-playbook … --tags reload` |
+| Reboot the Pis | `ansible-playbook … --tags reboot` (opt-in, one at a time) |
 | Switch transport | `./pin-broker.sh` · `./reset-transport.sh` · `./disable-broker.sh` ([transport](./docs/transport.md)) |
 | Run the broker relay | `cd broker && ./install-broker.sh` ([transport](./docs/transport.md)) |
 | Server logs / status | `sudo journalctl -u crema -f` · `sudo systemctl status crema` |

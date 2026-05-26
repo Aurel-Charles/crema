@@ -121,7 +121,7 @@ broker live tourne sur le Mac (:4000), cf. mémoire `live-broker-on-mac`.**
 
 - **Source de vérité** : repo Git sur GitHub (public — aucun secret commité, `data/` et tokens broker hors repo ; clone HTTPS sans auth)
 - **Édition** : Claude Code sur Mac, repo cloné en local
-- **Déploiement Pi** : deux chemins — (a) **Ansible** (`ansible/`, recommandé) : un seul run depuis le Mac provisionne un Pi fraîchement flashé de zéro (Node/nvm + clone + npm + service + kiosk + blanking + watchdog + pin broker optionnel), idempotent ; `--tags deploy` pour pousser une simple MAJ de code, `--tags transport` pour (dé)pingler un broker. Validé sur un Pi vierge (`pi-test`) en mai 2026. (b) **manuel** : `git pull` + `install-pi.sh` pour le setup initial. Webhook / GitHub Actions ssh toujours envisageable mais pas en place.
+- **Déploiement Pi** : deux chemins — (a) **Ansible** (`ansible/`, recommandé) : un seul run depuis le Mac provisionne un Pi fraîchement flashé de zéro (Node/nvm + clone + npm + service + kiosk + blanking + watchdog + pin broker optionnel), idempotent ; `--tags deploy` pour pousser une simple MAJ de code (restart serveur + reload kiosk auto si le code a changé), `--tags reload` pour forcer restart+reload sans pull, `--tags reboot` pour rebooter les Pi un par un (`serial: 1`, opt-in), `--tags transport` pour (dé)pingler un broker. Validé sur un Pi vierge (`pi-test`) en mai 2026. (b) **manuel** : `git pull` + `install-pi.sh` pour le setup initial. Webhook / GitHub Actions ssh toujours envisageable mais pas en place.
 - **Pas de CI/CD** pour l'instant
 
 ## Tests de stabilité
