@@ -68,6 +68,7 @@ capricieux (se fige après quelques heures), un **watchdog** systemd optionnel
 - `install-pi.sh`, `start.sh`, `start-display.sh` — setup/lancement Pi
 - `pin-broker.sh` (dual + URL épinglée), `reset-transport.sh` (retour dual+découverte), `disable-broker.sh` (force p2p), `enable-broker.sh` (force broker pur) — bascule transport
 - `wifi-watchdog-on.sh` / `wifi-watchdog-off.sh` — watchdog Wi-Fi USB (Pi à clé USB, ex. pi-desk ; cf. `docs/usb-wifi-dongle.md`)
+- `ansible/` — provisioning Ansible one-shot depuis le Mac (équivalent idempotent d'`install-pi.sh` : Node/nvm + clone + npm + service + kiosk + blanking + watchdog + pin broker optionnel). Cf. `ansible/README.md`.
 - `docs/` — `setup`, `transport`, `broker-protocol`, `architecture`, `operations`, `pi-desk-3.5-screen`, `usb-wifi-dongle`
 
 ## Transport : trois modes (dual | p2p | broker)
@@ -120,7 +121,7 @@ broker live tourne sur le Mac (:4000), cf. mémoire `live-broker-on-mac`.**
 
 - **Source de vérité** : repo Git sur GitHub (public — aucun secret commité, `data/` et tokens broker hors repo ; clone HTTPS sans auth)
 - **Édition** : Claude Code sur Mac, repo cloné en local
-- **Déploiement Pi** : `git pull` manuel sur chaque Pi (+ `install-pi.sh` pour le setup initial) ; automatisation (webhook / GitHub Actions ssh) toujours envisageable mais pas en place
+- **Déploiement Pi** : deux chemins — (a) **Ansible** (`ansible/`, recommandé) : un seul run depuis le Mac provisionne un Pi fraîchement flashé de zéro (Node/nvm + clone + npm + service + kiosk + blanking + watchdog + pin broker optionnel), idempotent ; `--tags deploy` pour pousser une simple MAJ de code, `--tags transport` pour (dé)pingler un broker. Validé sur un Pi vierge (`pi-test`) en mai 2026. (b) **manuel** : `git pull` + `install-pi.sh` pour le setup initial. Webhook / GitHub Actions ssh toujours envisageable mais pas en place.
 - **Pas de CI/CD** pour l'instant
 
 ## Tests de stabilité

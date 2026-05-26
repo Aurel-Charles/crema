@@ -55,7 +55,7 @@ ansible-playbook playbook.yml --ask-become-pass --limit pi-desk
 # Update code only on an already-provisioned Pi (git pull + npm install)
 ansible-playbook playbook.yml --ask-become-pass --tags deploy
 
-# Just one slice: --tags service | display | watchdog
+# Just one slice: --tags service | transport | display | watchdog
 ansible-playbook playbook.yml --ask-become-pass --tags watchdog
 ```
 
@@ -63,10 +63,19 @@ ansible-playbook playbook.yml --ask-become-pass --tags watchdog
 
 - `crema_dir` defaults to `/home/<user>/crema` — change it in `inventory.ini` if you
   cloned elsewhere.
-- To pin a broker (instead of dual auto-discovery), set `crema_env` for a host, e.g.
-  `crema_env={'CREMA_TRANSPORT':'broker','CREMA_BROKER_URL':'ws://10.0.0.5:4000'}` —
-  it becomes `Environment=` lines in the unit. The dedicated `pin-broker.sh` /
-  `reset-transport.sh` drop-ins still work and are independent of this.
+- **Pin a broker** (dual mode, p2p stays as fallback — the Ansible equivalent of
+  `pin-broker.sh`): set `crema_broker_url` (and optionally `crema_broker_token`) on a
+  host in the inventory. It writes the *same* drop-in
+  `/etc/systemd/system/crema.service.d/transport.conf`, so there's a single source and
+  `reset-transport.sh` still removes it. Additive — only managed when the var is set,
+  never auto-removed, so a default run won't clobber a hand-pinned Pi. Scope it with
+  `--tags transport`. Example:
+  ```ini
+  pi-aurel ansible_host=pi-aurel.local ansible_user=aurel crema_broker_url=wss://broker.example.com
+  ```
+- To force a different transport entirely (broker-only, no fallback), that's a separate
+  thing: set `crema_env={'CREMA_TRANSPORT':'broker','CREMA_BROKER_URL':'ws://10.0.0.5:4000'}`
+  — it bakes `Environment=` lines into `crema.service`. Don't mix it with `crema_broker_url`.
 - The watchdog driver/iface default to `rtl8xxxu` / `wlan0`; override per group or host
   with `watchdog_driver=` / `watchdog_iface=`.
 - Changing a Pi's `crema_screen` profile only takes effect after the Chromium kiosk

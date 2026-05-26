@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+# Broker pin, DUAL mode (p2p stays as fallback) — Ansible equivalent of
+# pin-broker.sh. Same drop-in path, so reset-transport.sh still removes it.
+# CREMA_TRANSPORT is left unset on purpose to keep the dual topology.
+[Service]
+Environment=CREMA_BROKER_URL={{ crema_broker_url }}
+{% if crema_broker_token | default('') | length > 0 %}
+Environment=CREMA_BROKER_TOKEN={{ crema_broker_token }}
+{% endif -%}

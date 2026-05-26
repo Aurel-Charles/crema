@@ -12,7 +12,26 @@
   `raspi-config` or the Imager pre-config — the owner name is derived from
   it automatically.
 
-## One-time install
+## Provisioning with Ansible (recommended)
+
+From a freshly flashed Pi (OS + Wi-Fi + SSH key) a single run from the Mac does
+everything below — installs Node via nvm, clones the repo, builds the native
+modules, and lays down the systemd service, kiosk autostart, screen blanking,
+and the USB Wi-Fi watchdog. It's idempotent, so re-runs only fix drift.
+
+```bash
+# Add the Pi to ansible/inventory.ini (hostname, ansible_user, optional crema_screen),
+# then from the repo:
+cd ansible
+ansible-playbook playbook.yml --ask-become-pass --limit pi-<name>
+sudo reboot   # or: ssh <user>@pi-<name>.local sudo reboot — to land in the kiosk
+```
+
+See [`ansible/README.md`](../ansible/README.md) for prerequisites, tags
+(`deploy` / `service` / `transport` / `display` / `watchdog`) and broker pinning.
+The manual steps below are the fallback if you'd rather not use Ansible.
+
+## Manual one-time install (alternative)
 
 ```bash
 # 1. SSH in and install Node 20 via nvm
@@ -52,6 +71,9 @@ From your dev machine, push to `main`, then on each Pi:
 ```bash
 ssh <user>@pi-<name>.local "cd ~/crema && git pull && sudo systemctl restart crema"
 ```
+
+Or, with Ansible: `ansible-playbook playbook.yml --ask-become-pass --tags deploy`
+(git pull + npm install + restart, on every Pi or one via `--limit`).
 
 If `package.json` changed, add `&& npm install` before the restart.
 On 32-bit Pi OS (armv7), `better-sqlite3` compiles from source on
