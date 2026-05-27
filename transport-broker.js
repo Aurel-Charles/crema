@@ -1,6 +1,6 @@
 import { io as ioClient } from 'socket.io-client';
-import { OWNER, INSTANCE_ID, BROKER_URL, BROKER_URL_DEFAULT, BROKER_TOKEN } from './config.js';
-import { getNickname } from './store.js';
+import { INSTANCE_ID, OWNER, BROKER_URL_DEFAULT, BROKER_TOKEN } from './config.js';
+import { getNickname, getBrokerUrl } from './store.js';
 import { peerLog, errLog } from './logger.js';
 
 // Broker transport: a Socket.IO *client* to the LAN broker. Implements the same
@@ -15,6 +15,7 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
   let deliverHandler = () => {};
   let peers = []; // [{ owner, instanceId, nickname }]
   let connected = false;
+  let currentUrl = null; // the URL we're connected to / last asked to use
 
   function setConnected(next) {
     if (next === connected) return;
@@ -31,9 +32,12 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
   return {
     isConnected: () => connected,
 
-    health: () => ({ mode: 'broker', broker: connected ? 'connected' : 'down' }),
+    health: () => ({ mode: 'broker', broker: connected ? 'connected' : 'down', url: currentUrl }),
 
-    init(url = BROKER_URL ?? BROKER_URL_DEFAULT) {
+    // Default honours the V7.3 precedence (UI override > env) in pure broker
+    // mode. In dual mode the composite always calls init(url) explicitly.
+    init(url = getBrokerUrl() ?? BROKER_URL_DEFAULT) {
+      currentUrl = url;
       socket = ioClient(url, { reconnection: true, reconnectionDelayMax: 5000 });
 
       socket.on('connect', () => {
@@ -110,6 +114,14 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
       socket = null;
       peers = [];
       setConnected(false);
+    },
+
+    // V7.3 — re-point to a new broker URL in pure broker mode (settings page).
+    // `url` is the resolved effective target; empty falls back to the default.
+    // In dual mode the composite drives re-pointing itself and never calls this.
+    setBrokerUrl(url) {
+      this.stop();
+      this.init(url || BROKER_URL_DEFAULT);
     },
 
     listPeers() {

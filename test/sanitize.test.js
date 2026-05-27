@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   clampTtl, sanitizeReplies, sanitizeResponseOptions, sanitizeShortcuts,
-  sanitizeNickname, sanitizeTarget,
+  sanitizeNickname, sanitizeTarget, sanitizeBrokerUrl,
 } from '../sanitize.js';
 import {
   MIN_TTL_MS, MAX_TTL_MS, MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH,
@@ -150,5 +150,34 @@ test('sanitizeTarget', async (t) => {
   });
   await t.test('over-length → empty (treated as unset, not truncated)', () => {
     assert.equal(sanitizeTarget('x'.repeat(MAX_LABEL_LENGTH + 1)), '');
+  });
+});
+
+test('sanitizeBrokerUrl', async (t) => {
+  await t.test("empty/whitespace/non-string → '' (clear the override)", () => {
+    assert.equal(sanitizeBrokerUrl(''), '');
+    assert.equal(sanitizeBrokerUrl('   '), '');
+    assert.equal(sanitizeBrokerUrl(undefined), '');
+    assert.equal(sanitizeBrokerUrl(null), '');
+    assert.equal(sanitizeBrokerUrl(42), '');
+  });
+  await t.test('accepts ws:// and wss://, trims', () => {
+    assert.equal(sanitizeBrokerUrl('  ws://192.168.1.50:4000 '), 'ws://192.168.1.50:4000');
+    assert.equal(sanitizeBrokerUrl('wss://crema-broker.cloud.110lab.fr'),
+      'wss://crema-broker.cloud.110lab.fr');
+  });
+  await t.test('drops a lone trailing slash (matches the env/pinned form)', () => {
+    assert.equal(sanitizeBrokerUrl('wss://broker.example/'), 'wss://broker.example');
+  });
+  await t.test('keeps an explicit path', () => {
+    assert.equal(sanitizeBrokerUrl('wss://host/relay'), 'wss://host/relay');
+  });
+  await t.test('null (rejected) for a non-ws scheme', () => {
+    assert.equal(sanitizeBrokerUrl('http://broker.example'), null);
+    assert.equal(sanitizeBrokerUrl('https://broker.example'), null);
+  });
+  await t.test('null (rejected) for an unparseable URL', () => {
+    assert.equal(sanitizeBrokerUrl('not a url'), null);
+    assert.equal(sanitizeBrokerUrl('ws://'), null);
   });
 });

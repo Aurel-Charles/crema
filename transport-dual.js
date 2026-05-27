@@ -1,7 +1,7 @@
 import { createP2pTransport } from './transport-p2p.js';
 import { createBrokerTransport } from './transport-broker.js';
 import { discoverBroker } from './discover-broker.js';
-import { BROKER_URL } from './config.js';
+import { getBrokerUrl } from './store.js';
 import { peerLog } from './logger.js';
 
 // Dual transport: runs the broker client and the P2P stack *at the same time*.
@@ -15,15 +15,17 @@ import { peerLog } from './logger.js';
 //  - Because every Pi stays reachable on both paths, there is no split-brain:
 //    a Pi that only sees the broker and one that only sees mDNS still talk.
 //
-// Broker location: CREMA_BROKER_URL pinned (e.g. a static IP) skips discovery;
-// otherwise we mDNS-discover `_crema-broker._tcp` and connect when it appears.
+// Broker location (V7.3 precedence): a UI override (data/transport.json, set on
+// the settings page) wins, else the CREMA_BROKER_URL env pin, else mDNS discovery
+// of `_crema-broker._tcp`. getBrokerUrl() in store.js resolves the first two; a
+// null result means "discover". The settings page re-points live via setBrokerUrl.
 export function createDualTransport({ io }) {
   let brokerStarted = false;
   let brokerUrl = null;
   let discovery = null;
 
   function emitHealth() {
-    io.emit('transport:health', { mode: 'dual', broker: brokerState() });
+    io.emit('transport:health', { mode: 'dual', broker: brokerState(), url: brokerUrl });
   }
 
   function brokerState() {
@@ -108,17 +110,50 @@ export function createDualTransport({ io }) {
     emitHealth();
   }
 
+  // Deliberate (re)targeting of the broker, used at boot and by setBrokerUrl().
+  // Unlike startBroker (which only re-points a *down* broker, for discovery),
+  // this always applies the requested target:
+  //   url        → pin: stop discovery, (re-)connect the broker to url
+  //   null/empty → unpin: drop the broker connection, fall back to mDNS discovery
+  function applyBrokerTarget(url) {
+    if (url) {
+      if (discovery) { discovery.stop(); discovery = null; }
+      if (!brokerStarted) {
+        brokerStarted = true;
+        brokerUrl = url;
+        broker.init(url);
+      } else if (url !== brokerUrl) {
+        peerLog('broker:repoint', `Broker re-pointé → ${url}`, { from: brokerUrl, to: url });
+        broker.stop();
+        brokerUrl = url;
+        broker.init(url);
+      }
+    } else {
+      if (brokerStarted) {
+        broker.stop();
+        brokerStarted = false;
+        brokerUrl = null;
+      }
+      if (!discovery) {
+        discovery = discoverBroker({ onUrl: (u) => startBroker(u) });
+      }
+    }
+    emitHealth();
+  }
+
   return {
     init() {
       // P2P first: mDNS peers + HTTP inbound are live immediately.
       p2p.init();
+      // Effective broker target: UI override > env pin > null (→ discovery).
+      // Read from the store, which store.init() loaded before transport.init().
+      applyBrokerTarget(getBrokerUrl());
+    },
 
-      if (BROKER_URL) {
-        startBroker(BROKER_URL); // pinned — skip discovery
-      } else {
-        emitHealth(); // 'discovering'
-        discovery = discoverBroker({ onUrl: (url) => startBroker(url) });
-      }
+    // V7.3 — broker URL changed from the settings page. `url` is the already
+    // resolved effective target (override || env || null); re-point live.
+    setBrokerUrl(url) {
+      applyBrokerTarget(url || null);
     },
 
     stop() {
@@ -164,7 +199,7 @@ export function createDualTransport({ io }) {
     },
 
     health() {
-      return { mode: 'dual', broker: brokerState() };
+      return { mode: 'dual', broker: brokerState(), url: brokerUrl };
     },
   };
 }
