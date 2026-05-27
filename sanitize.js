@@ -95,6 +95,13 @@ export function sanitizeTarget(input) {
   return s.length > MAX_LABEL_LENGTH ? '' : s;
 }
 
+// Light/dark appearance (V7.4): a closed set, so anything that isn't the exact
+// string 'dark' collapses to 'light'. Keeps the persisted file and the DOM
+// attribute to two known values.
+export function sanitizeTheme(input) {
+  return input === 'dark' ? 'dark' : 'light';
+}
+
 // Broker URL set from the settings page (V7.3). Tri-state so the PUT route can
 // tell "clear the override" apart from "rejected":
 //   ''     → empty/whitespace = clear the override (fall back to env, then mDNS)

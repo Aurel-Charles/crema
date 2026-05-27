@@ -11,6 +11,7 @@
   <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="apple-touch-icon" href="/icon.svg" />
   <title>Crema — Préférences</title>
+  <script src="/appearance.js"></script>
   <link rel="stylesheet" href="/theme.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -264,6 +265,18 @@
     </section>
 
     <section>
+      <div class="dnd-row">
+        <div class="copy">
+          <h2>Apparence</h2>
+          <p class="hint">Mode sombre — palette nuit indigo. S'applique à cet écran et à l'écran du Pi.</p>
+        </div>
+        <button type="button" class="toggle" id="theme-toggle" aria-pressed="false" aria-label="Mode sombre">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+    </section>
+
+    <section>
       <h2>Surnom</h2>
       <p class="hint">Le nom affiché sur les écrans, à la place de <span id="owner-name">…</span>. Laisse vide pour revenir au défaut.</p>
       <div class="rows">
@@ -322,6 +335,7 @@
     const shortcutsCardsEl = document.getElementById('shortcuts-cards');
     const shortcutAddBtn = document.getElementById('shortcut-add');
     const dndToggle = document.getElementById('dnd-toggle');
+    const themeToggle = document.getElementById('theme-toggle');
     const nicknameInput = document.getElementById('nickname');
     const ownerNameEl = document.getElementById('owner-name');
     const status = document.getElementById('status');
@@ -471,6 +485,45 @@
 
     const socket = io();
     socket.on('dnd:updated', ({ enabled }) => reflectDnd(enabled));
+
+    // ===== Appearance (light/dark) =====
+    // appearance.js owns *applying* the theme (DOM + cache + live socket) on
+    // every page; here we just drive the toggle: reflect the current value and
+    // PUT the new one. Apply optimistically via cremaApplyTheme so the switch
+    // feels instant, and roll back the toggle if the PUT fails.
+    function reflectTheme(dark) {
+      themeToggle.setAttribute('aria-pressed', String(dark === true));
+    }
+    async function loadTheme() {
+      try {
+        const { theme } = await (await fetch('/theme')).json();
+        reflectTheme(theme === 'dark');
+      } catch {}
+    }
+    async function setTheme(dark) {
+      const prev = themeToggle.getAttribute('aria-pressed') === 'true';
+      themeToggle.disabled = true;
+      reflectTheme(dark);
+      window.cremaApplyTheme?.(dark ? 'dark' : 'light');
+      try {
+        const r = await fetch('/theme', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme: dark ? 'dark' : 'light' }),
+        });
+        if (!r.ok) throw new Error();
+      } catch {
+        reflectTheme(prev);
+        window.cremaApplyTheme?.(prev ? 'dark' : 'light');
+      } finally {
+        themeToggle.disabled = false;
+      }
+    }
+    themeToggle.addEventListener('click', () => {
+      setTheme(themeToggle.getAttribute('aria-pressed') !== 'true');
+    });
+    // A switch made elsewhere (the Pi's screen, another tab) syncs the toggle.
+    socket.on('theme:updated', ({ theme }) => reflectTheme(theme === 'dark'));
 
     // ===== Profile (nickname) =====
     async function loadProfile() {
@@ -646,6 +699,7 @@
 
     loadAll();
     loadDnd();
+    loadTheme();
     loadTransport();
     loadProfile();
   </script>

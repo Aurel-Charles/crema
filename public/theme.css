@@ -297,3 +297,84 @@ body.crema-display .shortcut-btn:active {
 .msg-card .msg-meta .direction .arrow {
   color: var(--crema-accent);
 }
+
+/* ===== DARK — "Mega Type" nuit (V7.4) =======================================
+ * Variante nuit proposée par Claude Design (mega-dark.jsx) : indigo profond,
+ * encre crème, rainbow plus saturé pour percer le noir. Activée par
+ * <html data-theme="dark"> (réglé depuis /settings, persisté data/theme.json,
+ * appliqué flash-free par appearance.js). Tout étant piloté par tokens, ce
+ * seul bloc re-skinne PWA + écran ; placé en fin de feuille pour gagner l'ordre
+ * source sur les variantes .crema-display.day/.night de même spécificité. */
+
+:root[data-theme="dark"] {
+  /* PWA (indigo nuit) */
+  --crema-bg:               #15102A;
+  --crema-bg-gradient:      linear-gradient(180deg, #1E1638 0%, #15102A 60%, #0B0719 100%);
+  --crema-surface:          #221A3E;
+  --crema-text:             #F7E0C2;
+  --crema-muted:            #A28BB8;
+  --crema-stroke:           rgba(247, 224, 194, 0.14);
+  --crema-stroke-faint:     rgba(247, 224, 194, 0.07);
+
+  /* Accents — pêche/rose du couchant, qui brillent sur l'indigo */
+  --crema-accent:           #FFB37A;
+  --crema-accent-deep:      #FF7FB8;
+  --crema-accent-ink:       #15102A;   /* encre sombre, lisible sur la pêche */
+  --crema-attention:        #FFC468;
+  --crema-presence:         #8AD4C2;
+
+  --crema-danger:           #FF8A7A;
+  --crema-danger-bg:        rgba(255, 122, 110, 0.16);
+
+  /* Rainbow — mêmes 7 bandes, plus saturées (le rainbow fait office de lumière).
+   * --crema-rainbow les référence en var() → se recompose tout seul. */
+  --band-1: #FF9A78;
+  --band-2: #FFC468;
+  --band-3: #E6DD7E;
+  --band-4: #8AD4C2;
+  --band-5: #7DAEEB;
+  --band-6: #BC97E2;
+  --band-7: #E07FB6;
+}
+
+/* Écran — l'indigo prend la place du coucher de soleil. On garde la modulation
+ * jour/nuit (SunCalc) : nuit = indigo profond, jour = indigo plus clair/chaud
+ * avec un soleil plus présent. */
+[data-theme="dark"] .crema-display,
+[data-theme="dark"] .crema-display.night {
+  --crema-bg:               #15102A;
+  --crema-bg-gradient:
+    radial-gradient(ellipse at 78% -12%, rgba(255, 196, 104, 0.16) 0%, transparent 55%),
+    radial-gradient(ellipse at 12% 112%, rgba(255, 127, 184, 0.18) 0%, transparent 55%),
+    linear-gradient(170deg, #1E1638 0%, #15102A 52%, #0B0719 100%);
+  --crema-plinth:           #000000;
+  --crema-text:             #F7E0C2;
+  --crema-muted:            #A28BB8;
+  --crema-stroke:           rgba(247, 224, 194, 0.12);
+}
+
+[data-theme="dark"] .crema-display.day {
+  /* "Jour" en dark = indigo un cran plus clair + soleil ambre plus franc. */
+  --crema-bg:               #1E1638;
+  --crema-bg-gradient:
+    radial-gradient(ellipse at 60% -14%, rgba(255, 196, 104, 0.30) 0%, transparent 58%),
+    radial-gradient(ellipse at 92% 104%, rgba(255, 154, 120, 0.20) 0%, transparent 52%),
+    linear-gradient(175deg, #2A1F4A 0%, #1E1638 55%, #120C28 100%);
+  --crema-text:             #F7E0C2;
+  --crema-muted:            #B49AC8;
+}
+
+/* Quelques surfaces des pages portent des valeurs codées en dur (tints pensés
+ * pour le clair) qu'un token ne couvre pas — on les rattrape ici. */
+
+/* Piste TTL : tint indigo sombre → invisible sur l'indigo. Crème faible. */
+[data-theme="dark"] .msg-rule { background: rgba(247, 224, 194, 0.20); }
+
+/* Toast : le voile blanc clair crame sur l'indigo. */
+[data-theme="dark"] #notif {
+  background: rgba(20, 14, 38, 0.66);
+  border-color: var(--crema-stroke);
+}
+
+/* Toggle settings : un knob couleur surface disparaîtrait sur la piste sombre. */
+[data-theme="dark"] .toggle .toggle-knob { background: var(--crema-text); }
