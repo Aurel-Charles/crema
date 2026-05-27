@@ -1,10 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import {
   DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE, IDENTITY_FILE, DEFAULT_TARGET_FILE,
-  DEFAULT_REPLIES, OWNER,
+  TRANSPORT_FILE, DEFAULT_REPLIES, OWNER, BROKER_URL,
 } from './config.js';
 import {
   clampTtl, sanitizeReplies, sanitizeShortcuts, sanitizeNickname, sanitizeTarget,
+  sanitizeBrokerUrl,
 } from './sanitize.js';
 import { sysLog } from './logger.js';
 
@@ -134,6 +135,39 @@ export function getDefaultTarget() {
   return defaultTarget;
 }
 
+// ===== Broker URL override (V7.3) =====
+//
+// A broker URL set from the settings page, persisted in data/transport.json.
+// Precedence (decided with the user): this override > the CREMA_BROKER_URL env
+// pin (systemd drop-in / pin-broker.sh) > mDNS auto-discovery. Empty here = fall
+// back to the env, then discovery. The transport reads getBrokerUrl() at boot
+// and is hot re-pointed on PUT /transport — no service restart, no sudo.
+
+let brokerUrlOverride = '';
+
+async function loadTransport() {
+  try {
+    const raw = await readFile(TRANSPORT_FILE, 'utf8');
+    const url = sanitizeBrokerUrl(JSON.parse(raw)?.url);
+    // null = a malformed value slipped into the file; treat as "no override".
+    brokerUrlOverride = url || '';
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('[transport] load failed:', err.message);
+    brokerUrlOverride = '';
+  }
+}
+
+// The override alone (what the UI edits). Empty string = not set.
+export function getBrokerUrlOverride() {
+  return brokerUrlOverride;
+}
+
+// The effective pinned URL the transport should use: override first, then the
+// env pin. null = neither set → the transport falls back to mDNS discovery.
+export function getBrokerUrl() {
+  return brokerUrlOverride || BROKER_URL || null;
+}
+
 // ===== Init =====
 
 export async function init({ app, io, transport }) {
@@ -142,6 +176,7 @@ export async function init({ app, io, transport }) {
   await loadDnd();
   await loadIdentity();
   await loadDefaultTarget();
+  await loadTransport();
 
   app.get('/replies', (req, res) => res.json(replies));
   app.put('/replies', async (req, res) => {
@@ -219,5 +254,42 @@ export async function init({ app, io, transport }) {
     transport?.announceProfile?.();
     sysLog('profile:update', nickname ? `Surnom défini : « ${nickname} »` : 'Surnom retiré', { owner: OWNER, nickname });
     res.json({ owner: OWNER, nickname });
+  });
+
+  // Broker URL (V7.3). The page reads GET to render the field + the live status,
+  // and PUTs to set/clear the override. `source` tells the UI where the
+  // currently-effective URL comes from, so it can flag "this overrides the
+  // system pin" honestly. `health` mirrors transport.health() for the badge.
+  function transportState() {
+    const override = brokerUrlOverride;
+    const effective = override || BROKER_URL || null;
+    const source = override ? 'ui' : (BROKER_URL ? 'env' : 'discovery');
+    return { url: override, envUrl: BROKER_URL ?? null, effective, source, health: transport?.health?.() ?? null };
+  }
+
+  app.get('/transport', (req, res) => res.json(transportState()));
+  app.put('/transport', async (req, res) => {
+    const next = sanitizeBrokerUrl(req.body?.url);
+    if (next === null) {
+      return res.status(400).json({ error: 'URL invalide — attendu ws:// ou wss://' });
+    }
+    if (next === brokerUrlOverride) return res.json(transportState());
+    brokerUrlOverride = next;
+    try {
+      await persistAtomic(TRANSPORT_FILE, { url: brokerUrlOverride });
+    } catch (err) {
+      console.error('[transport] persist failed:', err.message);
+    }
+    // Hot re-point: hand the effective URL (override || env || null) to the
+    // transport. null → it reverts to mDNS discovery. No-op on transports that
+    // don't own a broker (p2p). Then tell the front-ends so the badge updates.
+    transport?.setBrokerUrl?.(getBrokerUrl());
+    io.emit('transport:config-updated', transportState());
+    sysLog(
+      'transport:broker-url',
+      brokerUrlOverride ? `Broker épinglé via UI → ${brokerUrlOverride}` : 'Override broker effacé (retour env/découverte)',
+      { url: brokerUrlOverride },
+    );
+    res.json(transportState());
   });
 }

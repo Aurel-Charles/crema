@@ -94,3 +94,19 @@ export function sanitizeTarget(input) {
   const s = typeof input === 'string' ? input.trim() : '';
   return s.length > MAX_LABEL_LENGTH ? '' : s;
 }
+
+// Broker URL set from the settings page (V7.3). Tri-state so the PUT route can
+// tell "clear the override" apart from "rejected":
+//   ''     → empty/whitespace = clear the override (fall back to env, then mDNS)
+//   string → a valid ws:// or wss:// URL, normalised (lone trailing slash dropped)
+//   null   → invalid (unparseable, or not a ws/ws scheme) → caller answers 400
+export function sanitizeBrokerUrl(input) {
+  const s = typeof input === 'string' ? input.trim() : '';
+  if (!s) return '';
+  let u;
+  try { u = new URL(s); } catch { return null; }
+  if (u.protocol !== 'ws:' && u.protocol !== 'wss:') return null;
+  if (!u.hostname) return null;
+  const path = u.pathname === '/' ? '' : u.pathname;
+  return `${u.protocol}//${u.host}${path}${u.search}`;
+}

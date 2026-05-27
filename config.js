@@ -65,6 +65,11 @@ export const DEFAULT_TARGET_FILE = join(DATA_DIR, 'default-target.json');
 // V7.1 — display nickname (and room labels later). owner stays the immutable
 // routing identity; this is a presentation layer propagated on top of it.
 export const IDENTITY_FILE = join(DATA_DIR, 'identity.json');
+// V7.3 — broker URL set from the settings page. Takes precedence over the
+// CREMA_BROKER_URL env pin (systemd drop-in / pin-broker.sh), which becomes a
+// mere seed; empty here = fall back to env, then mDNS discovery. Lives in data/
+// so it's git-ignored and survives restarts.
+export const TRANSPORT_FILE = join(DATA_DIR, 'transport.json');
 export const HISTORY_DB_FILE = join(DATA_DIR, 'history.db');
 export const PUBLIC_DIR = join(__dirname, 'public');
 

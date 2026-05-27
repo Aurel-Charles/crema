@@ -237,6 +237,11 @@
     }
     .status.ok { color: #2d7a3a; }
     .status.err { color: var(--crema-danger); }
+
+    .broker-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .broker-actions .add { flex: 0 0 auto; margin: 0; }
+    #broker-effective { margin-top: 6px; font-size: 13px; }
+    #broker-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   </style>
 </head>
 <body>
@@ -271,6 +276,18 @@
     <section>
       <h2>Connexion</h2>
       <p class="hint" id="transport-line">…</p>
+      <p class="hint">Adresse du broker (relais central). Laisse <strong>vide</strong> pour la découverte automatique sur le réseau local. Format : <code>ws://hôte:port</code> ou <code>wss://hôte</code>.</p>
+      <div class="rows">
+        <div class="row">
+          <input type="text" id="broker-url" placeholder="wss://… (vide = auto)" autocomplete="off" spellcheck="false" inputmode="url" />
+        </div>
+      </div>
+      <p class="hint" id="broker-effective">…</p>
+      <div class="broker-actions">
+        <button type="button" class="add" id="broker-save">Enregistrer le broker</button>
+        <button type="button" class="add" id="broker-clear">Effacer (auto)</button>
+      </div>
+      <div class="status" id="broker-status"></div>
     </section>
 
     <section>
@@ -472,6 +489,12 @@
 
     // ===== Transport / broker status =====
     const transportLine = document.getElementById('transport-line');
+    const brokerUrlInput = document.getElementById('broker-url');
+    const brokerEffective = document.getElementById('broker-effective');
+    const brokerSaveBtn = document.getElementById('broker-save');
+    const brokerClearBtn = document.getElementById('broker-clear');
+    const brokerStatus = document.getElementById('broker-status');
+
     function renderTransport(t) {
       if (!t || !t.broker) { transportLine.textContent = '—'; return; }
       const map = {
@@ -482,14 +505,64 @@
       };
       transportLine.textContent = map[t.broker] ?? t.mode ?? '—';
     }
+
+    // Effective broker + where it comes from (UI override > env pin > discovery).
+    function renderBrokerInfo(s) {
+      if (!s) { brokerEffective.textContent = ''; return; }
+      if (s.source === 'ui') {
+        brokerEffective.textContent = `Épinglé ici : ${s.effective} (prime sur un éventuel réglage système).`;
+      } else if (s.source === 'env') {
+        brokerEffective.innerHTML = `Épinglé par le système : <code>${esc(s.effective)}</code>. Saisir une adresse ici le remplacera.`;
+      } else {
+        brokerEffective.textContent = 'Découverte automatique — aucune adresse fixée.';
+      }
+      // Keep the field in sync with the stored override, unless mid-edit here.
+      if (document.activeElement !== brokerUrlInput) brokerUrlInput.value = s.url || '';
+    }
+
     socket.on('transport:health', renderTransport);
+    // A change made elsewhere (the Pi's screen, another device) syncs in live.
+    socket.on('transport:config-updated', (s) => {
+      renderTransport(s.health);
+      renderBrokerInfo(s);
+    });
+
     async function loadTransport() {
       try {
-        const r = await fetch('/me');
-        const { transport } = await r.json();
-        renderTransport(transport);
+        const s = await (await fetch('/transport')).json();
+        renderTransport(s.health);
+        renderBrokerInfo(s);
       } catch {}
     }
+
+    async function putBroker(url) {
+      brokerStatus.textContent = 'Application…';
+      brokerStatus.className = 'status';
+      try {
+        const r = await fetch('/transport', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const s = await r.json();
+        if (!r.ok) throw new Error(s.error || 'Échec');
+        renderTransport(s.health);
+        renderBrokerInfo(s);
+        brokerStatus.textContent = s.url ? 'Broker mis à jour' : 'Retour à la découverte auto';
+        brokerStatus.className = 'status ok';
+        setTimeout(() => { brokerStatus.textContent = ''; brokerStatus.className = 'status'; }, 2500);
+      } catch (err) {
+        brokerStatus.textContent = err.message || 'Erreur';
+        brokerStatus.className = 'status err';
+      }
+    }
+
+    brokerSaveBtn.addEventListener('click', () => putBroker(brokerUrlInput.value.trim()));
+    brokerClearBtn.addEventListener('click', () => { brokerUrlInput.value = ''; putBroker(''); });
+    // Enter in the URL field saves the broker, not the whole preferences form.
+    brokerUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); putBroker(brokerUrlInput.value.trim()); }
+    });
 
     // ===== Load =====
     async function loadPeers() {

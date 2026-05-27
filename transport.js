@@ -11,7 +11,9 @@ import { TRANSPORT } from './config.js';
 //   findPeer({owner?, instanceId?}) -> peer|null
 //   deliver(target, kind, payload) -> Promise<{ok:true} | {ok:false, error}>
 //   onDeliver((from, kind, payload) => void) register the receive-side handler
-//   health() -> { mode, broker }            current transport status (badge)
+//   health() -> { mode, broker, url? }       current transport status (badge)
+//   setBrokerUrl(url|null)                   V7.3 — re-point the broker live
+//                                            (no-op on p2p); null → discovery
 export async function createTransport({ io }) {
   if (TRANSPORT === 'p2p') {
     const { createP2pTransport } = await import('./transport-p2p.js');

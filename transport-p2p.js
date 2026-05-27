@@ -45,6 +45,10 @@ export function createP2pTransport({ io }) {
       lifecycle?.refresh();
     },
 
+    // V7.3 — no broker on this path, so a broker-URL change is a no-op. Present
+    // only to satisfy the transport interface (settings PUT /transport calls it).
+    setBrokerUrl() {},
+
     listPeers() {
       return peers.listPeers();
     },
