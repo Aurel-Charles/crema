@@ -25,6 +25,25 @@
     crema_env: {}
 
   tasks:
+    # Passwordless sudo for the deploy user, so unattended runs (CI / Semaphore)
+    # need no become password. Installed FIRST: every later become task in this
+    # run — and every future run — then escalates without a prompt. Ansible
+    # escalates a Python interpreter as root, not a fixed binary, so NOPASSWD
+    # can't be scoped to e.g. systemctl; it's ALL for the automation user.
+    # Acceptable on a single-purpose home-LAN Pi. visudo-validated before write
+    # so a typo can't lock you out. Bootstrap once with --ask-become-pass; drop
+    # the flag afterwards. Scope a re-run with --tags sudoers.
+    - name: Grant passwordless sudo to the deploy user (unattended become)
+      become: true
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/010-crema-{{ ansible_user }}"
+        content: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+      tags: [sudoers]
+
     # install-pi.sh steps 4 & 5: apt packages.
     - name: Install system packages (build tools + emoji font)
       become: true
