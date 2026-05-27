@@ -36,7 +36,9 @@ Node is installed via **nvm** (not apt), matching the proven fleet setup —
   SSH enabled. Nothing else needs to be installed on it by hand.
 - SSH key access to each Pi. Usernames differ — set in `inventory.ini`
   (`aurel@pi-aurel`, `pi@pi-slibar`, `pi@pi-desk`); verify with `ssh <user>@<host>.local true`.
-- `sudo` rights. pi-desk needs a sudo password → pass `--ask-become-pass`.
+- `sudo` rights. The **first** run needs a sudo password (`--ask-become-pass`);
+  it installs passwordless sudo for the deploy user, so every later run — and CI
+  — needs no password. See *sudo — passwordless (NOPASSWD)* below.
 
 ## Usage
 
@@ -66,6 +68,40 @@ ansible-playbook playbook.yml --ask-become-pass --tags reboot --limit pi-desk
 # Just one slice: --tags service | transport | display | watchdog
 ansible-playbook playbook.yml --ask-become-pass --tags watchdog
 ```
+
+## sudo — passwordless (NOPASSWD)
+
+The systemd/apt tasks need root. Rather than feed a sudo password to every run
+(impossible unattended — that's what broke the Semaphore deploy at the *Restart
+crema* handler), the playbook installs a sudoers drop-in
+(`/etc/sudoers.d/010-crema-<user>`) granting the deploy user passwordless sudo.
+
+- **Bootstrap once** (provisioning is from the Mac anyway), supplying the
+  password so the drop-in can be written:
+
+  ```bash
+  # full provisioning run — installs the drop-in along the way
+  ansible-playbook playbook.yml --ask-become-pass
+
+  # or just the drop-in, on already-provisioned Pis:
+  ansible-playbook playbook.yml --ask-become-pass --tags sudoers --limit pi-test,pi-desk
+  ```
+
+- **Afterwards, drop the flag** — local and CI runs escalate silently:
+
+  ```bash
+  ansible-playbook playbook.yml --tags deploy
+  ```
+
+- **Semaphore**: no become password and no vault — just remove any
+  `ansible_become_password` extra-var secret from the template's Environment.
+
+Why `NOPASSWD: ALL` and not scoped to `systemctl`: Ansible escalates a Python
+interpreter as root (the AnsiballZ module wrapper), not a fixed binary, so
+per-command sudoers rules don't apply to it. The grant is therefore broad — fine
+for a single-purpose home-LAN Pi whose deploy user already has full sudo, but
+don't copy this onto a multi-user or internet-exposed host. The file is
+`visudo`-validated before install, so a syntax slip can't lock you out.
 
 ## Notes
 
