@@ -27,9 +27,18 @@ ansible-playbook playbook.yml --ask-become-pass --limit pi-<name>
 sudo reboot   # or: ssh <user>@pi-<name>.local sudo reboot — to land in the kiosk
 ```
 
-See [`ansible/README.md`](../ansible/README.md) for prerequisites, tags
-(`deploy` / `service` / `transport` / `display` / `watchdog` / `reload` / `reboot`)
-and broker pinning.
+`--ask-become-pass` is only needed the **first** time: that run installs a
+passwordless-sudo drop-in for the deploy user, so later runs (and CI) escalate
+without a prompt. See *sudo — passwordless (NOPASSWD)* in
+[`ansible/README.md`](../ansible/README.md), which also covers prerequisites,
+tags (`deploy` / `service` / `transport` / `display` / `watchdog` / `reload` /
+`reboot` / `sudoers`) and broker pinning.
+
+> **Addressing tip:** the inventory prefers a Pi's **static LAN IP** over
+> `pi-<name>.local`. An IP resolves from anywhere on the network (including a CI
+> runner); `.local` needs mDNS, which only works from the Mac. Pin each Pi to a
+> DHCP reservation on the router and put that IP in `ansible_host`.
+
 The manual steps below are the fallback if you'd rather not use Ansible.
 
 ## Manual one-time install (alternative)
@@ -91,6 +100,24 @@ To reload the display without rebooting (kiosk has an auto-restart loop):
 ```bash
 ssh <user>@pi-<name>.local pkill -f chromium
 ```
+
+## Continuous deploy (Semaphore CI)
+
+The same Ansible playbook also runs unattended from a **Semaphore** runner on
+the home LAN (template `Deploy Crema (pi-test)`), so a code update can be a
+one-click deploy instead of an SSH session. Semaphore clones the repo from
+GitHub each run, so the inventory/playbook changes must be on `main` to take
+effect. Two things make the runner work where a naive setup fails:
+
+- **Static IPs, not `.local`** — the runner has no mDNS, so the inventory
+  addresses Pis by reserved LAN IP (see the addressing tip above).
+- **Passwordless sudo** — the runner can't type a become password, so the
+  playbook's `sudoers` task grants the deploy user NOPASSWD sudo (bootstrap it
+  once from the Mac with `--ask-become-pass`, then the runner needs no secret).
+
+With both in place the template needs **no secrets at all**: no SSH password, no
+sudo password, no vault. See [`ansible/README.md`](../ansible/README.md) for the
+NOPASSWD details.
 
 ## Docker Hub image
 
