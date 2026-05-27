@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
-import { INSTANCE_ID, OWNER, MAX_LABEL_LENGTH, MAX_REPLIES } from './config.js';
-import { clampTtl, findShortcut, getDefaultTarget } from './store.js';
+import { INSTANCE_ID, OWNER } from './config.js';
+import { findShortcut, getDefaultTarget } from './store.js';
+import { clampTtl, sanitizeResponseOptions } from './sanitize.js';
 import * as db from './db.js';
 import { msgLog, errLog } from './logger.js';
 
@@ -10,24 +11,6 @@ const trunc = (s, n = 40) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 //   - the peer replies (we get an inbound delivery with replyToMsgId), or
 //   - the TTL elapses (we emit msg:expired to our own display).
 const pendingMessages = new Map(); // msgId -> { text, targetOwner, expiresAt, timer }
-
-function sanitizeResponseOptions(input) {
-  if (!Array.isArray(input)) return [];
-  const cleaned = [];
-  const seen = new Set();
-  for (const item of input) {
-    const label = typeof item === 'string'
-      ? item.trim()
-      : (typeof item?.label === 'string' ? item.label.trim() : '');
-    if (!label) continue;
-    if (label.length > MAX_LABEL_LENGTH) continue;
-    if (seen.has(label)) continue;
-    seen.add(label);
-    cleaned.push({ label });
-    if (cleaned.length >= MAX_REPLIES) break;
-  }
-  return cleaned;
-}
 
 function trackPending({ id, text, targetOwner, expiresAt, io }) {
   const ttl = expiresAt - Date.now();
