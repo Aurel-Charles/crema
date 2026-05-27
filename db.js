@@ -121,6 +121,9 @@ export function insertMessage({
   if (!direction) throw new Error('insertMessage: direction required');
   // Tolerate duplicate inserts (e.g. same message replayed) — sqlite will
   // throw on PRIMARY KEY conflict, which we swallow to keep /inbox resilient.
+  // Returns true when a row was actually inserted, false on a swallowed
+  // duplicate, so callers can gate side effects (e.g. don't re-emit a message
+  // delivered twice). See handleIncoming in messaging.js.
   try {
     stmts.insert.run({
       id,
@@ -136,8 +139,10 @@ export function insertMessage({
       response_options: responseOptions ? JSON.stringify(responseOptions) : null,
       status,
     });
+    return true;
   } catch (err) {
-    if (err.code !== 'SQLITE_CONSTRAINT_PRIMARYKEY') throw err;
+    if (err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') return false;
+    throw err;
   }
 }
 

@@ -74,7 +74,7 @@ function handleIncoming(payload, io) {
 
   const opts = responseOptions.length > 0 ? responseOptions : null;
   const rowId = id ?? randomUUID();
-  db.insertMessage({
+  const inserted = db.insertMessage({
     id: rowId,
     direction: 'in',
     text,
@@ -87,6 +87,11 @@ function handleIncoming(payload, io) {
     responseOptions: opts,
     status: 'received',
   });
+  // Same message delivered twice (e.g. both transport paths) → ack ok but don't
+  // re-fire the screen/history. The reply-resolution above is idempotent, so a
+  // dup is now fully a no-op past the DB. See insertMessage in db.js.
+  if (!inserted) return { ok: true };
+
   io.emit('history:new');
   msgLog(
     isReply ? 'msg:reply-received' : 'msg:received',
