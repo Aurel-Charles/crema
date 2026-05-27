@@ -1,11 +1,17 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
-import { randomUUID } from 'crypto';
 import {
   DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE, IDENTITY_FILE, DEFAULT_TARGET_FILE,
-  MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH, MAX_SHORTCUT_TEXT, MAX_ICON_LENGTH,
-  DEFAULT_REPLIES, MIN_TTL_MS, MAX_TTL_MS, OWNER,
+  DEFAULT_REPLIES, OWNER,
 } from './config.js';
+import {
+  clampTtl, sanitizeReplies, sanitizeShortcuts, sanitizeNickname, sanitizeTarget,
+} from './sanitize.js';
 import { sysLog } from './logger.js';
+
+// Pure input validators now live in sanitize.js (unit-tested in isolation).
+// clampTtl is re-exported so existing importers (messaging.js) keep working
+// through store.js without a churn-only import change.
+export { clampTtl };
 
 async function persistAtomic(path, data) {
   await mkdir(DATA_DIR, { recursive: true });
@@ -14,31 +20,9 @@ async function persistAtomic(path, data) {
   await rename(tmp, path);
 }
 
-export function clampTtl(ttl) {
-  const n = Number(ttl);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(MIN_TTL_MS, Math.min(MAX_TTL_MS, n));
-}
-
 // ===== Quick replies (V3) =====
 
 let replies = [];
-
-function sanitizeReplies(input) {
-  if (!Array.isArray(input)) throw new Error('Liste invalide');
-  const cleaned = [];
-  const seen = new Set();
-  for (const item of input) {
-    const label = typeof item?.label === 'string' ? item.label.trim() : '';
-    if (!label) continue;
-    if (label.length > MAX_LABEL_LENGTH) continue;
-    if (seen.has(label)) continue;
-    seen.add(label);
-    cleaned.push({ label });
-    if (cleaned.length >= MAX_REPLIES) break;
-  }
-  return cleaned;
-}
 
 async function loadReplies() {
   try {
@@ -63,29 +47,6 @@ export function getReplies() {
 // ===== Shortcuts (V5) =====
 
 let shortcuts = [];
-
-function sanitizeShortcuts(input) {
-  if (!Array.isArray(input)) throw new Error('Liste invalide');
-  const cleaned = [];
-  for (const item of input) {
-    const label = typeof item?.label === 'string' ? item.label.trim() : '';
-    const text = typeof item?.text === 'string' ? item.text.trim() : '';
-    const icon = typeof item?.icon === 'string' ? item.icon.trim() : '';
-    const targetOwner = typeof item?.targetOwner === 'string' ? item.targetOwner.trim() : '';
-    const ttlMs = clampTtl(item?.ttlMs);
-    if (!label || label.length > MAX_LABEL_LENGTH) continue;
-    if (!text || text.length > MAX_SHORTCUT_TEXT) continue;
-    // Empty targetOwner is allowed = "global" shortcut, routed to the current
-    // global recipient at send time. A non-empty value pins the shortcut.
-    if (targetOwner.length > MAX_LABEL_LENGTH) continue;
-    if (!ttlMs) continue;
-    if (icon.length > MAX_ICON_LENGTH) continue;
-    const id = (typeof item?.id === 'string' && item.id) ? item.id : randomUUID();
-    cleaned.push({ id, label, icon, text, targetOwner, ttlMs });
-    if (cleaned.length >= MAX_SHORTCUTS) break;
-  }
-  return cleaned;
-}
 
 async function loadShortcuts() {
   try {
@@ -136,11 +97,6 @@ export function getDnd() {
 
 let nickname = '';
 
-export function sanitizeNickname(input) {
-  const s = typeof input === 'string' ? input.trim() : '';
-  return s.length > MAX_LABEL_LENGTH ? s.slice(0, MAX_LABEL_LENGTH) : s;
-}
-
 async function loadIdentity() {
   try {
     const raw = await readFile(IDENTITY_FILE, 'utf8');
@@ -163,11 +119,6 @@ export function getNickname() {
 // disabled when the choice is ambiguous.
 
 let defaultTarget = '';
-
-function sanitizeTarget(input) {
-  const s = typeof input === 'string' ? input.trim() : '';
-  return s.length > MAX_LABEL_LENGTH ? '' : s;
-}
 
 async function loadDefaultTarget() {
   try {
