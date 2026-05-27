@@ -70,6 +70,10 @@ export const IDENTITY_FILE = join(DATA_DIR, 'identity.json');
 // mere seed; empty here = fall back to env, then mDNS discovery. Lives in data/
 // so it's git-ignored and survives restarts.
 export const TRANSPORT_FILE = join(DATA_DIR, 'transport.json');
+// V7.4 — light/dark appearance picked from /settings. A pure presentation layer
+// (CSS-variable remap), persisted per-Pi so the toggle on a phone also re-skins
+// that Pi's screen. Empty/missing = 'light' (the default direction).
+export const THEME_FILE = join(DATA_DIR, 'theme.json');
 export const HISTORY_DB_FILE = join(DATA_DIR, 'history.db');
 export const PUBLIC_DIR = join(__dirname, 'public');
 

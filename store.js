@@ -1,11 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import {
   DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE, IDENTITY_FILE, DEFAULT_TARGET_FILE,
-  TRANSPORT_FILE, DEFAULT_REPLIES, OWNER, BROKER_URL,
+  TRANSPORT_FILE, THEME_FILE, DEFAULT_REPLIES, OWNER, BROKER_URL,
 } from './config.js';
 import {
   clampTtl, sanitizeReplies, sanitizeShortcuts, sanitizeNickname, sanitizeTarget,
-  sanitizeBrokerUrl,
+  sanitizeBrokerUrl, sanitizeTheme,
 } from './sanitize.js';
 import { sysLog } from './logger.js';
 
@@ -168,6 +168,29 @@ export function getBrokerUrl() {
   return brokerUrlOverride || BROKER_URL || null;
 }
 
+// ===== Appearance: light / dark (V7.4) =====
+//
+// A pure presentation choice (CSS-variable remap), persisted per-Pi so toggling
+// it from a phone also re-skins that Pi's screen. Front-ends (settings ↔ display
+// ↔ other tabs) sync live via the socket event, like dnd. 'light' is the default
+// direction; 'dark' adopts the deep-indigo "Mega Type" night palette.
+
+let theme = 'light';
+
+async function loadTheme() {
+  try {
+    const raw = await readFile(THEME_FILE, 'utf8');
+    theme = sanitizeTheme(JSON.parse(raw)?.theme);
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('[theme] load failed:', err.message);
+    theme = 'light';
+  }
+}
+
+export function getTheme() {
+  return theme;
+}
+
 // ===== Init =====
 
 export async function init({ app, io, transport }) {
@@ -177,6 +200,7 @@ export async function init({ app, io, transport }) {
   await loadIdentity();
   await loadDefaultTarget();
   await loadTransport();
+  await loadTheme();
 
   app.get('/replies', (req, res) => res.json(replies));
   app.put('/replies', async (req, res) => {
@@ -232,6 +256,24 @@ export async function init({ app, io, transport }) {
     io.emit('dnd:updated', { enabled: dndEnabled });
     sysLog(dndEnabled ? 'dnd:on' : 'dnd:off', dndEnabled ? 'Mode Ne Pas Déranger activé' : 'Mode Ne Pas Déranger désactivé');
     res.json({ enabled: dndEnabled });
+  });
+
+  // Appearance (V7.4). Pages read GET on load (after applying the localStorage
+  // cache for a flash-free first paint), and PUT to switch. The socket event
+  // re-skins the Pi's screen and any other open tab live, no reload.
+  app.get('/theme', (req, res) => res.json({ theme }));
+  app.put('/theme', async (req, res) => {
+    const next = sanitizeTheme(req.body?.theme);
+    if (next === theme) return res.json({ theme });
+    theme = next;
+    try {
+      await persistAtomic(THEME_FILE, { theme });
+    } catch (err) {
+      console.error('[theme] persist failed:', err.message);
+    }
+    io.emit('theme:updated', { theme });
+    sysLog('theme:update', theme === 'dark' ? 'Apparence : mode sombre' : 'Apparence : mode clair', { theme });
+    res.json({ theme });
   });
 
   // Profile: the display nickname. owner is always returned alongside so the

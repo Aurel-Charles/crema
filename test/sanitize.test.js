@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   clampTtl, sanitizeReplies, sanitizeResponseOptions, sanitizeShortcuts,
-  sanitizeNickname, sanitizeTarget, sanitizeBrokerUrl,
+  sanitizeNickname, sanitizeTarget, sanitizeBrokerUrl, sanitizeTheme,
 } from '../sanitize.js';
 import {
   MIN_TTL_MS, MAX_TTL_MS, MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH,
@@ -179,5 +179,20 @@ test('sanitizeBrokerUrl', async (t) => {
   await t.test('null (rejected) for an unparseable URL', () => {
     assert.equal(sanitizeBrokerUrl('not a url'), null);
     assert.equal(sanitizeBrokerUrl('ws://'), null);
+  });
+});
+
+test('sanitizeTheme', async (t) => {
+  await t.test("only the exact string 'dark' is dark", () => {
+    assert.equal(sanitizeTheme('dark'), 'dark');
+  });
+  await t.test("everything else collapses to 'light'", () => {
+    assert.equal(sanitizeTheme('light'), 'light');
+    assert.equal(sanitizeTheme('Dark'), 'light');
+    assert.equal(sanitizeTheme(''), 'light');
+    assert.equal(sanitizeTheme(undefined), 'light');
+    assert.equal(sanitizeTheme(null), 'light');
+    assert.equal(sanitizeTheme(42), 'light');
+    assert.equal(sanitizeTheme({}), 'light');
   });
 });
