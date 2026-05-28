@@ -12,9 +12,9 @@ l'**URL du broker éditable depuis `/settings`** (V7.3) et la **version
 runtime exposée et propagée** (V7.4).
 Tourne sur **cinq Pi** : `pi-aurel`, `pi-slibar`, `pi-desk` (écran tactile
 3.5"), `pi-test` et `flo`. `pi-test` sert à la fois de poste fixe et de banc
-d'essai Ansible. **Tous épinglés sur le broker cloud
-`wss://crema-broker.cloud.110lab.fr`** (opéré par Flo ; voir mémoire
-`cloud-broker-110lab`), pas sur un broker LAN — aucun des Pi maison n'héberge de
+d'essai Ansible. **Tous épinglés sur un broker cloud
+(`wss://<broker-host>`)** opéré par Flo — URL réelle hors repo, en mémoire
+perso seulement. Pas sur un broker LAN — aucun des Pi maison n'héberge de
 broker, ils en sont tous clients. Crema est aujourd'hui un
 **système pair-à-pair symétrique complet** : code identique sur chaque Pi,
 découverte mDNS automatique, messages/réponses/raccourcis/TTL, historique

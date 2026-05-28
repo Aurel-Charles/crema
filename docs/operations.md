@@ -11,9 +11,9 @@
   (install `avahi-utils` if missing); the broker advertises `_crema-broker._tcp`.
 - **Which transport path is live:** glance at the display's bottom-left
   watermark (empty = broker healthy), or grep the logs for `deliver:fallback`.
-  Confirm the broker sees its peers — for a LAN broker:
-  `curl http://<broker-ip>:4000/health` — or for the cloud broker:
-  `curl https://crema-broker.cloud.110lab.fr/health`. Since V7.4 the response
+  Confirm the broker sees its peers:
+  `curl http://<broker-ip>:4000/health` (LAN broker) or
+  `curl https://<broker-host>/health` (cloud broker). Since V7.4 the response
   carries the version of each peer:
   ```json
   { "ok": true, "peers": [{ "owner": "Test", "nickname": "", "version": "v7.4.1" }, …] }
