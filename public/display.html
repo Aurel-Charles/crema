@@ -663,13 +663,32 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .shortcut-btn.sent {
-      background: rgba(232, 137, 110, 0.18);
+    /* États sent/failed — préfixés body.crema-display pour battre en spécificité
+     * la règle générique de theme.css (fond blanc translucide + bordure band).
+     * Fond pleinement coloré (vert / rouge) au lieu d'une simple bordure :
+     * feedback clair sans avoir à lire le label. */
+    body.crema-display .shortcut-btn.sent {
+      background: color-mix(in srgb, var(--crema-presence) 45%, transparent);
       border-color: var(--crema-presence);
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--crema-presence) 40%, transparent);
     }
-    .shortcut-btn.failed {
-      background: rgba(179, 38, 30, 0.18);
+    body.crema-display .shortcut-btn.failed {
+      background: color-mix(in srgb, var(--crema-danger) 38%, transparent);
       border-color: var(--crema-danger);
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--crema-danger) 40%, transparent);
+    }
+
+    /* Mode nuit — le bouton garde un fond clair translucide (cf. theme.css :
+     * rgba(255,255,255,0.55) pour faire ressortir la pill sur l'indigo). En dark
+     * le token --crema-text bascule en crème, illisible sur ce fond clair. On
+     * force le texte en sombre — uniquement sur les boutons raccourci. */
+    [data-theme="dark"] .shortcut-btn,
+    [data-theme="dark"] .shortcut-btn .lbl {
+      color: #2A1A44;
+    }
+    /* La destination en sous-titre reste discrète (mais pas crème invisible) */
+    [data-theme="dark"] .shortcut-btn .dest {
+      color: #5C4A6E;
     }
 
     /* Global recipient bar — fixed in idle, shows who "global" shortcuts go to. */
