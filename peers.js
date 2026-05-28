@@ -2,7 +2,7 @@ import mdns from 'mdns';
 import { lookup as dnsLookup } from 'dns/promises';
 import { isIP } from 'net';
 import {
-  INSTANCE_ID, MDNS_RESOLVE_ADDRESSES, OWNER, PORT, SERVICE_NAME, SERVICE_TYPE,
+  INSTANCE_ID, MDNS_RESOLVE_ADDRESSES, OWNER, PORT, SERVICE_NAME, SERVICE_TYPE, VERSION,
 } from './config.js';
 import { getNickname } from './store.js';
 import { peerLog, errLog } from './logger.js';
@@ -40,7 +40,9 @@ export async function resolveHost(host) {
 }
 
 export function listPeers() {
-  return [...peerMap.values()].map((p) => ({ instanceId: p.instanceId, owner: p.owner, nickname: p.nickname }));
+  return [...peerMap.values()].map((p) => ({
+    instanceId: p.instanceId, owner: p.owner, nickname: p.nickname, version: p.version,
+  }));
 }
 
 export function findPeerByInstanceId(id) {
@@ -66,6 +68,7 @@ async function pingPeer(peer) {
   if (data.instanceId && data.instanceId !== peer.instanceId) {
     throw new Error('instanceId rotated');
   }
+  return data;
 }
 
 export function init({ io }) {
@@ -83,6 +86,7 @@ export function init({ io }) {
       instanceId: txt.instanceId,
       owner: txt.owner ?? '?',
       nickname: txt.nickname || '',
+      version: txt.version || '',
       host,
       address,
       addresses: Array.isArray(service.addresses) ? service.addresses : [],
@@ -107,24 +111,29 @@ export function init({ io }) {
     peerMap.set(service.name, peer);
     peerFailures.set(service.name, 0);
     if (!existing) {
-      peerLog('peer:up', `${peer.owner} apparu sur ${address}:${peer.port}`, {
-        owner: peer.owner, host, address, addresses: peer.addresses, port: peer.port,
+      peerLog('peer:up', `${peer.owner} apparu sur ${address}:${peer.port} (${peer.version || '?'})`, {
+        owner: peer.owner, host, address, addresses: peer.addresses, port: peer.port, version: peer.version,
       });
-      io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname });
+      io.emit('peer:up', {
+        instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname, version: peer.version,
+      });
     } else {
       if (existing.address !== address) {
         peerLog('peer:reresolved', `${peer.owner} → nouvelle IP ${address}:${peer.port}`, {
           owner: peer.owner, host, oldAddress: existing.address, address, addresses: peer.addresses,
         });
       }
-      // The peer re-advertised with a new nickname (V7.1 hot update over mDNS).
-      // Re-emit peer:up so front-ends upsert the new name — peer:up is an
-      // idempotent upsert keyed by instanceId.
-      if (existing.nickname !== peer.nickname) {
-        peerLog('peer:profile', `${peer.owner} → surnom « ${peer.nickname || '—'} »`, {
-          owner: peer.owner, nickname: peer.nickname,
+      // The peer re-advertised with a new nickname (V7.1 hot update over mDNS)
+      // or a new version (V7.4 on Pi restart with a new build). Re-emit peer:up
+      // so front-ends upsert the change — peer:up is an idempotent upsert keyed
+      // by instanceId.
+      if (existing.nickname !== peer.nickname || existing.version !== peer.version) {
+        peerLog('peer:profile', `${peer.owner} → surnom « ${peer.nickname || '—'} » · ${peer.version || '?'}`, {
+          owner: peer.owner, nickname: peer.nickname, version: peer.version,
         });
-        io.emit('peer:up', { instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname });
+        io.emit('peer:up', {
+          instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname, version: peer.version,
+        });
       }
     }
   };
@@ -146,8 +155,10 @@ export function init({ io }) {
       {
         name: SERVICE_NAME,
         // nickname read fresh at advertise time so a re-advertise (rebirth or
-        // V7.1 refresh()) picks up the current value.
-        txtRecord: { owner: OWNER, instanceId: INSTANCE_ID, nickname: getNickname() || '' },
+        // V7.1 refresh()) picks up the current value. version is frozen at boot
+        // (V7.4) — it can't change without a process restart, which mints a new
+        // INSTANCE_ID anyway and triggers a same-owner dedup on peers.
+        txtRecord: { owner: OWNER, instanceId: INSTANCE_ID, nickname: getNickname() || '', version: VERSION },
       },
     );
     advertisement.on('error', (err) => errLog('mdns:advertise-error', err.message));
@@ -194,8 +205,21 @@ export function init({ io }) {
   const healthInterval = setInterval(async () => {
     for (const [name, peer] of [...peerMap.entries()]) {
       try {
-        await pingPeer(peer);
+        const data = await pingPeer(peer);
         peerFailures.set(name, 0);
+        // V7.4 — backfill version from /me. The TXT mDNS record carries it
+        // too, but health-check is the more direct signal (no advertisement
+        // round-trip needed). Useful when the peer was discovered before V7.4
+        // shipped, then upgraded mid-run.
+        if (typeof data.version === 'string' && data.version && data.version !== peer.version) {
+          peer.version = data.version;
+          peerLog('peer:version', `${peer.owner} → version ${peer.version}`, {
+            owner: peer.owner, version: peer.version,
+          });
+          io.emit('peer:up', {
+            instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname, version: peer.version,
+          });
+        }
       } catch (err) {
         const failures = (peerFailures.get(name) ?? 0) + 1;
         peerFailures.set(name, failures);
