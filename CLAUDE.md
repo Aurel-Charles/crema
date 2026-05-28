@@ -86,7 +86,7 @@ migration. Voir `test/version.test.js`.
 - `pin-broker.sh` (dual + URL épinglée), `reset-transport.sh` (retour dual+découverte), `disable-broker.sh` (force p2p), `enable-broker.sh` (force broker pur) — bascule transport
 - `wifi-watchdog-on.sh` / `wifi-watchdog-off.sh` — watchdog Wi-Fi USB (Pi à clé USB, ex. pi-desk ; cf. `docs/usb-wifi-dongle.md`)
 - `ansible/` — provisioning Ansible one-shot depuis le Mac (équivalent idempotent d'`install-pi.sh` : Node/nvm + clone + npm + service + kiosk + blanking + watchdog + pin broker optionnel). Cf. `ansible/README.md`.
-- `docs/` — `setup`, `transport`, `broker-protocol`, `architecture`, `operations`, `pi-desk-3.5-screen`, `usb-wifi-dongle`
+- `docs/` — `setup`, `transport`, `broker-protocol`, `architecture`, `operations`, `cheatsheet`, `pi-desk-3.5-screen`, `usb-wifi-dongle`
 
 ## Transport : trois modes (dual | p2p | broker)
 
