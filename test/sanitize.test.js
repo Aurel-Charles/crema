@@ -163,8 +163,8 @@ test('sanitizeBrokerUrl', async (t) => {
   });
   await t.test('accepts ws:// and wss://, trims', () => {
     assert.equal(sanitizeBrokerUrl('  ws://192.168.1.50:4000 '), 'ws://192.168.1.50:4000');
-    assert.equal(sanitizeBrokerUrl('wss://crema-broker.cloud.110lab.fr'),
-      'wss://crema-broker.cloud.110lab.fr');
+    assert.equal(sanitizeBrokerUrl('wss://broker.example.fr'),
+      'wss://broker.example.fr');
   });
   await t.test('drops a lone trailing slash (matches the env/pinned form)', () => {
     assert.equal(sanitizeBrokerUrl('wss://broker.example/'), 'wss://broker.example');

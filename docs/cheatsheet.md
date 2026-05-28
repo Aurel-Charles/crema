@@ -72,7 +72,8 @@ done
 curl -s http://<pi>:3000/peers | jq
 
 # Broker health — full roster with versions (V7.4 shape)
-curl -s https://crema-broker.cloud.110lab.fr/health | jq
+curl -s https://<broker-host>/health | jq    # cloud broker
+curl -s http://<broker-ip>:4000/health | jq  # LAN broker
 
 # Message history (raw, last 20)
 sqlite3 ~/crema/data/history.db \
