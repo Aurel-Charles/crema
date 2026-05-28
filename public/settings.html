@@ -243,6 +243,70 @@
     .broker-actions .add { flex: 0 0 auto; margin: 0; }
     #broker-effective { margin-top: 6px; font-size: 13px; }
     #broker-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    /* ===== Colonnes ==========================================================
+     * Mobile : chaque .col empile ses sections en flex column, et le <form>
+     * (déjà flex column) empile col-left → col-right → status → save. Ordre
+     * de lecture identique à l'ancien layout.
+     * Desktop (≥900px) : <form> devient grid 2 col, .col devient grid item,
+     * status et save spannent les deux colonnes. Les deux colonnes ont des
+     * hauteurs indépendantes (pas de track partagée). */
+    .col { display: flex; flex-direction: column; gap: 28px; }
+
+    /* ===== Desktop (≥900px) — grille 2 colonnes + cartes "Currents" =========
+     * Chaque section devient une carte avec un liseré gauche tiré des 7 bandes
+     * rainbow de theme.css. --band défini par nth-of-type au sein de chaque
+     * colonne (1:1 avec les sections actuelles). */
+    @media (min-width: 900px) {
+      header {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 40px 0;
+      }
+      form {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 28px 40px 48px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+        column-gap: 28px;
+        row-gap: 28px;
+        align-items: start;
+      }
+      .col { gap: 20px; }
+      .col-left { grid-column: 1; }
+      .col-right { grid-column: 2; }
+
+      .col section {
+        margin: 0;
+        padding: 22px 26px;
+        background: var(--crema-surface);
+        border: 1px solid var(--crema-stroke);
+        border-left: 4px solid var(--band, var(--crema-accent));
+        border-radius: 16px;
+      }
+
+      /* Assignation des bandes Currents (theme.css : --band-1..7) */
+      .col-left  section:nth-of-type(1) { --band: var(--band-2); }  /* DND       — ambre   */
+      .col-left  section:nth-of-type(2) { --band: var(--band-6); }  /* Apparence — lavande */
+      .col-left  section:nth-of-type(3) { --band: var(--band-3); }  /* Surnom    — lime    */
+      .col-left  section:nth-of-type(4) { --band: var(--band-5); }  /* Connexion — bleu    */
+      .col-right section:nth-of-type(1) { --band: var(--band-1); }  /* Réponses  — corail  */
+      .col-right section:nth-of-type(2) { --band: var(--band-4); }  /* Raccourcis— menthe  */
+      .col-right section:nth-of-type(3) { --band: var(--band-7); }  /* À propos  — magenta */
+
+      /* Le titre de section reprend la teinte de sa bande — petit clin d'œil */
+      .col section h2 { color: var(--band, var(--crema-text)); }
+
+      /* Save + status traversent les deux colonnes, centrés, largeur lisible */
+      form > .status,
+      form > .save {
+        grid-column: 1 / -1;
+        justify-self: center;
+        width: 100%;
+        max-width: 480px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -252,78 +316,82 @@
   </header>
 
   <form id="form">
-    <section>
-      <div class="dnd-row">
-        <div class="copy">
-          <h2>Ne pas déranger</h2>
-          <p class="hint">Les messages reçus s'empilent en notif au lieu de prendre l'écran.</p>
+    <div class="col col-left">
+      <section>
+        <div class="dnd-row">
+          <div class="copy">
+            <h2>Ne pas déranger</h2>
+            <p class="hint">Les messages reçus s'empilent en notif au lieu de prendre l'écran.</p>
+          </div>
+          <button type="button" class="toggle" id="dnd-toggle" aria-pressed="false" aria-label="Ne pas déranger">
+            <span class="toggle-knob"></span>
+          </button>
         </div>
-        <button type="button" class="toggle" id="dnd-toggle" aria-pressed="false" aria-label="Ne pas déranger">
-          <span class="toggle-knob"></span>
-        </button>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <div class="dnd-row">
-        <div class="copy">
-          <h2>Apparence</h2>
-          <p class="hint">Mode sombre — palette nuit indigo. S'applique à cet écran et à l'écran du Pi.</p>
+      <section>
+        <div class="dnd-row">
+          <div class="copy">
+            <h2>Apparence</h2>
+            <p class="hint">Mode sombre — palette nuit indigo. S'applique à cet écran et à l'écran du Pi.</p>
+          </div>
+          <button type="button" class="toggle" id="theme-toggle" aria-pressed="false" aria-label="Mode sombre">
+            <span class="toggle-knob"></span>
+          </button>
         </div>
-        <button type="button" class="toggle" id="theme-toggle" aria-pressed="false" aria-label="Mode sombre">
-          <span class="toggle-knob"></span>
-        </button>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <h2>Surnom</h2>
-      <p class="hint">Le nom affiché sur les écrans, à la place de <span id="owner-name">…</span>. Laisse vide pour revenir au défaut.</p>
-      <div class="rows">
-        <div class="row">
-          <input type="text" id="nickname" maxlength="30" placeholder="Ex: Bureau" autocomplete="off" />
+      <section>
+        <h2>Surnom</h2>
+        <p class="hint">Le nom affiché sur les écrans, à la place de <span id="owner-name">…</span>. Laisse vide pour revenir au défaut.</p>
+        <div class="rows">
+          <div class="row">
+            <input type="text" id="nickname" maxlength="30" placeholder="Ex: Bureau" autocomplete="off" />
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <h2>Connexion</h2>
-      <p class="hint" id="transport-line">…</p>
-      <p class="hint">Adresse du broker (relais central). Laisse <strong>vide</strong> pour la découverte automatique sur le réseau local. Format : <code>ws://hôte:port</code> ou <code>wss://hôte</code>.</p>
-      <div class="rows">
-        <div class="row">
-          <input type="text" id="broker-url" placeholder="wss://… (vide = auto)" autocomplete="off" spellcheck="false" inputmode="url" />
+      <section>
+        <h2>Connexion</h2>
+        <p class="hint" id="transport-line">…</p>
+        <p class="hint">Adresse du broker (relais central). Laisse <strong>vide</strong> pour la découverte automatique sur le réseau local. Format : <code>ws://hôte:port</code> ou <code>wss://hôte</code>.</p>
+        <div class="rows">
+          <div class="row">
+            <input type="text" id="broker-url" placeholder="wss://… (vide = auto)" autocomplete="off" spellcheck="false" inputmode="url" />
+          </div>
         </div>
-      </div>
-      <p class="hint" id="broker-effective">…</p>
-      <div class="broker-actions">
-        <button type="button" class="add" id="broker-save">Enregistrer le broker</button>
-        <button type="button" class="add" id="broker-clear">Effacer (auto)</button>
-      </div>
-      <div class="status" id="broker-status"></div>
-    </section>
+        <p class="hint" id="broker-effective">…</p>
+        <div class="broker-actions">
+          <button type="button" class="add" id="broker-save">Enregistrer le broker</button>
+          <button type="button" class="add" id="broker-clear">Effacer (auto)</button>
+        </div>
+        <div class="status" id="broker-status"></div>
+      </section>
+    </div>
 
-    <section>
-      <h2>Réponses rapides</h2>
-      <p class="hint">Boutons proposés sur le Pi quand tu reçois un message. Max 5.</p>
-      <div class="rows" id="replies-rows"></div>
-      <button type="button" class="add" id="reply-add">+ Ajouter</button>
-    </section>
+    <div class="col col-right">
+      <section>
+        <h2>Réponses rapides</h2>
+        <p class="hint">Boutons proposés sur le Pi quand tu reçois un message. Max 5.</p>
+        <div class="rows" id="replies-rows"></div>
+        <button type="button" class="add" id="reply-add">+ Ajouter</button>
+      </section>
 
-    <section>
-      <h2>Raccourcis</h2>
-      <p class="hint">Boutons sur l'écran du Pi pour envoyer un message d'un tap. Max 6.</p>
-      <div class="cards" id="shortcuts-cards"></div>
-      <button type="button" class="add" id="shortcut-add">+ Ajouter un raccourci</button>
-    </section>
+      <section>
+        <h2>Raccourcis</h2>
+        <p class="hint">Boutons sur l'écran du Pi pour envoyer un message d'un tap. Max 6.</p>
+        <div class="cards" id="shortcuts-cards"></div>
+        <button type="button" class="add" id="shortcut-add">+ Ajouter un raccourci</button>
+      </section>
 
-    <section>
-      <h2>À propos</h2>
-      <p class="hint" style="margin-bottom: 4px;">Cette installation</p>
-      <div class="hint" id="about-self">—</div>
-      <p class="hint" id="about-peers-label" style="margin: 12px 0 4px;">Pairs</p>
-      <div class="hint" id="about-peers"></div>
-    </section>
+      <section>
+        <h2>À propos</h2>
+        <p class="hint" style="margin-bottom: 4px;">Cette installation</p>
+        <div class="hint" id="about-self">—</div>
+        <p class="hint" id="about-peers-label" style="margin: 12px 0 4px;">Pairs</p>
+        <div class="hint" id="about-peers"></div>
+      </section>
+    </div>
 
     <div class="status" id="status"></div>
     <button type="submit" class="save" id="save">Enregistrer</button>
