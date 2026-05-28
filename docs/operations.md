@@ -1,5 +1,9 @@
 # Operating notes
 
+> Looking for a quick command without explanation? Try the
+> [**cheatsheet**](./cheatsheet.md) — same commands, grouped by domain,
+> no prose.
+
 - **Server logs:** `sudo journalctl -u crema -f`
 - **Server status:** `sudo systemctl status crema`
 - **Manual restart:** `sudo systemctl restart crema`

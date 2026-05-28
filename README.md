@@ -68,6 +68,7 @@ screen.
 - [`transport.md`](./docs/transport.md) — the three transport modes, switching, running the broker relay.
 - [`broker-protocol.md`](./docs/broker-protocol.md) — the broker wire protocol (register / deliver / presence).
 - [`architecture.md`](./docs/architecture.md) — how it's built, tech stack, and the Direction Mirage design system.
+- [`cheatsheet.md`](./docs/cheatsheet.md) — one-glance reference for the commands that come up most often (restart, deploy, inspect versions, switch transport, stability test…).
 - [`operations.md`](./docs/operations.md) — day-to-day operating notes and known gotchas.
 - [`pi-desk-3.5-screen.md`](./docs/pi-desk-3.5-screen.md) — Waveshare 3.5" HDMI touchscreen setup.
 - [`usb-wifi-dongle.md`](./docs/usb-wifi-dongle.md) — USB Wi-Fi dongle notes and the rtl8xxxu auto-recovery watchdog.
