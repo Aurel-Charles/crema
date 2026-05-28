@@ -70,12 +70,16 @@ au dual + découverte), `disable-broker.sh` (force p2p), `enable-broker.sh`
 ### 1. `register` — Pi → broker
 Émis dès la connexion. Annonce l'identité du Pi.
 ```js
-emit('register', { owner: "Aurel", instanceId: "<uuid>", nickname?: "Bureau", token?: "<secret>" })
+emit('register', { owner: "Aurel", instanceId: "<uuid>", nickname?: "Bureau", version?: "v7.4.0", token?: "<secret>" })
 ```
 `nickname` (V7.1) est le **surnom d'affichage** optionnel — une couche de
 présentation par-dessus `owner`. `owner` reste l'identité de routage immuable :
 le surnom ne sert jamais à router ni à dédupliquer. Vide/absent ⇒ on affiche
 `owner`.
+`version` (V7.4) est la **version runtime du Pi** (`git describe` ou
+`CREMA_VERSION` env pour Docker), figée au démarrage. Propagation pure :
+elle ne change rien au routage ni à la dedup, juste relayée dans `peers` /
+`peer:up` pour qu'on puisse spotter un Pi en retard sans SSH.
 Le broker enregistre `owner → socket`. Si un `owner` déjà présent se reconnecte
 avec un **nouvel `instanceId`** (Pi redémarré), le broker remplace l'ancien
 socket et émet `peer:down`(ancien) puis `peer:up`(nouveau) — équivalent du
@@ -87,14 +91,15 @@ correspond pas, le broker rejette la connexion (déconnexion immédiate).
 ### 2. `peers` — broker → Pi
 Envoyé juste après un `register` réussi. Liste des pairs connectés (hors soi).
 ```js
-emit('peers', [ { owner: "Flo", instanceId: "<uuid>", nickname: "Cuisine" } ])
+emit('peers', [ { owner: "Flo", instanceId: "<uuid>", nickname: "Cuisine", version: "v7.4.0" } ])
 ```
-Mappe sur l'actuel `peers:init`. `nickname` est `""` si non défini.
+Mappe sur l'actuel `peers:init`. `nickname` et `version` sont `""` si non
+définis (vieux client pré-V7.4 par exemple).
 
 ### 3. `peer:up` / `peer:down` — broker → Pi
 Diffusés à tous les autres Pi lors d'une (dé)connexion.
 ```js
-emit('peer:up',   { owner, instanceId, nickname })
+emit('peer:up',   { owner, instanceId, nickname, version })
 emit('peer:down', { owner, instanceId })
 ```
 

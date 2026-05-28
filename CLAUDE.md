@@ -4,11 +4,12 @@ Système de messagerie local entre Raspberry Pi (cinq aujourd'hui : `pi-aurel`, 
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
-## Étape actuelle : V7.3 (URL broker éditable depuis /settings, en fonctionnement)
+## Étape actuelle : V7.4 (version exposée dans /me + propagée aux pairs)
 
 La roadmap V0→V6 est livrée, plus le **transport dual** (V7.0), le **surnom
-d'affichage** (V7.1), le **profil petit écran + watchdog Wi-Fi USB** (V7.2) et
-l'**URL du broker éditable depuis `/settings`** (V7.3).
+d'affichage** (V7.1), le **profil petit écran + watchdog Wi-Fi USB** (V7.2),
+l'**URL du broker éditable depuis `/settings`** (V7.3) et la **version
+runtime exposée et propagée** (V7.4).
 Tourne sur **cinq Pi** : `pi-aurel`, `pi-slibar`, `pi-desk` (écran tactile
 3.5"), `pi-test` et `flo`. `pi-test` sert à la fois de poste fixe et de banc
 d'essai Ansible. **Tous épinglés sur le broker cloud
@@ -36,6 +37,17 @@ capricieux (se fige après quelques heures), un **watchdog** systemd optionnel
 (`./wifi-watchdog-on.sh`) la récupère sans replug physique. Voir
 `docs/pi-desk-3.5-screen.md`, `docs/usb-wifi-dongle.md` et les mémoires
 `pi-desk-waveshare-touch` / `pi-desk-wifi-rtl8xxxu-drop`.
+
+**Version runtime exposée (V7.4)** : chaque Pi capte sa propre version au
+démarrage dans `config.js` (`detectVersion`, précédence `CREMA_VERSION` env >
+`git describe --tags --always --dirty` > `"unknown"`) et l'expose dans
+`/me` (`version`). La même couche de propagation que `nickname` V7.1 la
+distribue : TXT mDNS (`crema._tcp`), payload broker `register` + `roster` +
+`peer:up`. Stockée par pair dans `peerMap` / `peers[]`, affichée discrètement
+dans une section « À propos » en bas de `/settings` (mon Pi + liste pairs).
+Côté Docker, l'image embarque la version via `--build-arg GIT_DESCRIBE` au
+build CI (`.git/` absent du container). Pas de dépendance nouvelle, pas de
+migration. Voir `test/version.test.js`.
 
 **Architecture en place** :
 - **Découverte** : `peers.js` — chaque Pi s'annonce et browse le service mDNS
@@ -173,10 +185,14 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - ✅ **V7.1** — Surnom d'affichage éditable, propagé sur les 3 transports (voir « Étape actuelle »)
 - ✅ **V7.2** — Profil petit écran (`sm`, pi-desk 3.5") + watchdog Wi-Fi USB (récupération auto du dongle `rtl8xxxu`)
 - ✅ **V7.3** — URL du broker éditable depuis `/settings` (override persisté `data/transport.json` > env > mDNS), re-pointage à chaud sans restart ni sudo
+- ✅ **V7.4** — Version runtime exposée dans `/me` et propagée aux pairs (TXT mDNS + broker `register`/`roster`/`peer:up`), affichée dans `/settings` (section « À propos », mon Pi + pairs). Docker reçoit la version via `--build-arg GIT_DESCRIBE` au build CI.
 
 Roadmap initiale livrée, puis étendue (transport dual, surnom, profil petit
-écran + watchdog Wi-Fi). Pistes encore ouvertes : accès hors domicile, multi-Pi
-par personne (labels de pièce). Chaque version est restée indépendamment utile.
+écran + watchdog Wi-Fi, URL broker éditable, version exposée). Pistes encore
+ouvertes : accès hors domicile, multi-Pi par personne (labels de pièce),
+badge UI quand un pair tourne sur une version différente (V7.5 candidate
+naturelle vu que V7.4 vient de poser les données). Chaque version est restée
+indépendamment utile.
 
 ## Architecture cible (V1+)
 
