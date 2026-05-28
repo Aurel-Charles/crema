@@ -668,14 +668,16 @@
      * Fond pleinement coloré (vert / rouge) au lieu d'une simple bordure :
      * feedback clair sans avoir à lire le label. */
     body.crema-display .shortcut-btn.sent {
-      background: color-mix(in srgb, var(--crema-presence) 45%, transparent);
+      background: color-mix(in srgb, var(--crema-presence) 78%, transparent);
       border-color: var(--crema-presence);
-      box-shadow: 0 4px 14px color-mix(in srgb, var(--crema-presence) 40%, transparent);
+      border-width: 2px;
+      box-shadow: 0 4px 22px color-mix(in srgb, var(--crema-presence) 65%, transparent);
     }
     body.crema-display .shortcut-btn.failed {
-      background: color-mix(in srgb, var(--crema-danger) 38%, transparent);
+      background: color-mix(in srgb, var(--crema-danger) 72%, transparent);
       border-color: var(--crema-danger);
-      box-shadow: 0 4px 14px color-mix(in srgb, var(--crema-danger) 40%, transparent);
+      border-width: 2px;
+      box-shadow: 0 4px 22px color-mix(in srgb, var(--crema-danger) 60%, transparent);
     }
 
     /* Mode nuit — le bouton garde un fond clair translucide (cf. theme.css :
