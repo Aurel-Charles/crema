@@ -15,12 +15,19 @@ RUN npm install --omit=dev
 
 FROM node:20-bookworm-slim
 
+# V7.4 — `.git/` is excluded by .dockerignore, so `git describe` can't run
+# inside the container; the CI workflow passes the resolved tag/sha through
+# this build-arg, which the server reads via process.env.CREMA_VERSION
+# (config.js detectVersion).
+ARG GIT_DESCRIBE=unknown
+
 ENV NODE_ENV=production \
   PORT=3000 \
   CREMA_TRANSPORT=broker \
   CREMA_EMBED_BROKER=1 \
   CREMA_BROKER_URL=ws://127.0.0.1:4000 \
-  CREMA_BROKER_ADVERTISE=0
+  CREMA_BROKER_ADVERTISE=0 \
+  CREMA_VERSION=$GIT_DESCRIBE
 
 WORKDIR /app
 
