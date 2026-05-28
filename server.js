@@ -4,7 +4,7 @@ import { Server } from 'socket.io';
 import SunCalc from 'suncalc';
 import { join } from 'path';
 
-import { OWNER, INSTANCE_ID, PORT, LAT, LON, PUBLIC_DIR, EMBED_BROKER } from './config.js';
+import { OWNER, INSTANCE_ID, PORT, LAT, LON, PUBLIC_DIR, EMBED_BROKER, VERSION } from './config.js';
 import { createTransport } from './transport.js';
 import * as store from './store.js';
 import * as messaging from './messaging.js';
@@ -37,7 +37,13 @@ app.get('/history', (req, res) => res.sendFile(join(PUBLIC_DIR, 'history.html'))
 app.get('/logs', (req, res) => res.sendFile(join(PUBLIC_DIR, 'logs.html')));
 
 app.get('/me', (req, res) => {
-  res.json({ owner: OWNER, instanceId: INSTANCE_ID, nickname: store.getNickname(), transport: transport.health() });
+  res.json({
+    owner: OWNER,
+    instanceId: INSTANCE_ID,
+    nickname: store.getNickname(),
+    version: VERSION,
+    transport: transport.health(),
+  });
 });
 
 app.get('/peers', (req, res) => {
