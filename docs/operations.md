@@ -7,7 +7,17 @@
   (install `avahi-utils` if missing); the broker advertises `_crema-broker._tcp`.
 - **Which transport path is live:** glance at the display's bottom-left
   watermark (empty = broker healthy), or grep the logs for `deliver:fallback`.
-  Confirm the broker sees both Pis: `curl http://<broker-ip>:4000/health`.
+  Confirm the broker sees its peers — for a LAN broker:
+  `curl http://<broker-ip>:4000/health` — or for the cloud broker:
+  `curl https://crema-broker.cloud.110lab.fr/health`. Since V7.4 the response
+  carries the version of each peer:
+  ```json
+  { "ok": true, "peers": [{ "owner": "Test", "nickname": "", "version": "v7.4.1" }, …] }
+  ```
+- **Which version is each Pi running** (V7.4): the broker `/health` above
+  gives the full picture in one call. Per-Pi spot-check:
+  `curl http://<pi>:3000/me | jq .version` — also visible in the PWA at
+  `/settings` → "À propos".
 - **Switch transport:** `./pin-broker.sh`, `./reset-transport.sh`,
   `./disable-broker.sh`, `./enable-broker.sh` — see [`transport.md`](./transport.md).
 - **Broker logs/status:** `sudo journalctl -u crema-broker -f` /
