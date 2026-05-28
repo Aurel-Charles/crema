@@ -15,7 +15,7 @@ export function startBroker({
   token = process.env.CREMA_BROKER_TOKEN ?? null,
   advertise = process.env.CREMA_BROKER_ADVERTISE !== '0',
 } = {}) {
-  // owner -> { socket, instanceId, nickname }
+  // owner -> { socket, instanceId, nickname, version }
   const registry = new Map();
   let advertisement = null;
 
@@ -23,7 +23,12 @@ export function startBroker({
     // Tiny health endpoint so the box can be probed without a WS client.
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, peers: [...registry.keys()] }));
+      res.end(JSON.stringify({
+        ok: true,
+        peers: [...registry.entries()].map(([owner, entry]) => ({
+          owner, nickname: entry.nickname || '', version: entry.version || '',
+        })),
+      }));
       return;
     }
     res.writeHead(404);
@@ -36,7 +41,9 @@ export function startBroker({
     const list = [];
     for (const [owner, entry] of registry) {
       if (owner === exceptOwner) continue;
-      list.push({ owner, instanceId: entry.instanceId, nickname: entry.nickname || '' });
+      list.push({
+        owner, instanceId: entry.instanceId, nickname: entry.nickname || '', version: entry.version || '',
+      });
     }
     return list;
   }
@@ -55,7 +62,7 @@ export function startBroker({
   }
 
   io.on('connection', (socket) => {
-    socket.on('register', ({ owner, instanceId, nickname, token: peerToken } = {}) => {
+    socket.on('register', ({ owner, instanceId, nickname, version, token: peerToken } = {}) => {
       if (token && peerToken !== token) {
         socket.emit('register:denied', { error: 'bad token' });
         socket.disconnect(true);
@@ -80,11 +87,14 @@ export function startBroker({
       socket.data.owner = owner;
       socket.data.instanceId = instanceId;
       socket.data.nickname = nickname || '';
-      registry.set(owner, { socket, instanceId, nickname: nickname || '' });
+      socket.data.version = version || '';
+      registry.set(owner, { socket, instanceId, nickname: nickname || '', version: version || '' });
 
       socket.emit('peers', roster(owner));
-      socket.broadcast.emit('peer:up', { owner, instanceId, nickname: nickname || '' });
-      log(`register ${owner} (${instanceId.slice(0, 8)})${nickname ? ` "${nickname}"` : ''} — ${registry.size} online`);
+      socket.broadcast.emit('peer:up', {
+        owner, instanceId, nickname: nickname || '', version: version || '',
+      });
+      log(`register ${owner} (${instanceId.slice(0, 8)})${nickname ? ` "${nickname}"` : ''}${version ? ` · ${version}` : ''} — ${registry.size} online`);
     });
 
     // V7.1 — display nickname change. Not a re-register (that trips same-owner

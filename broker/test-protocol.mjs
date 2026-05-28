@@ -36,7 +36,7 @@ try {
   // --- Aurel registers (alone) ---
   const aurel = client();
   await new Promise((r) => aurel.s.on('connect', r));
-  aurel.s.emit('register', { owner: 'Aurel', instanceId: 'aurel-1', nickname: 'Bureau' });
+  aurel.s.emit('register', { owner: 'Aurel', instanceId: 'aurel-1', nickname: 'Bureau', version: 'v7.4.0' });
   await wait(200);
   ok(aurel.events.some((e) => e.ev === 'peers' && e.data.length === 0),
     'Aurel reçoit un roster vide (seul)');
@@ -44,15 +44,21 @@ try {
   // --- Flo registers → Aurel should see peer:up, Flo gets roster with Aurel ---
   const flo = client();
   await new Promise((r) => flo.s.on('connect', r));
-  flo.s.emit('register', { owner: 'Flo', instanceId: 'flo-1' });
+  flo.s.emit('register', { owner: 'Flo', instanceId: 'flo-1', version: 'v7.3.0' });
   await wait(200);
   ok(flo.events.some((e) => e.ev === 'peers' && e.data.some((p) => p.owner === 'Aurel')),
     'Flo reçoit un roster contenant Aurel');
   ok(flo.events.some((e) => e.ev === 'peers'
       && e.data.some((p) => p.owner === 'Aurel' && p.nickname === 'Bureau')),
     'Le roster porte le surnom d’Aurel (« Bureau »)');
+  ok(flo.events.some((e) => e.ev === 'peers'
+      && e.data.some((p) => p.owner === 'Aurel' && p.version === 'v7.4.0')),
+    'V7.4 — le roster porte la version d’Aurel (« v7.4.0 »)');
   ok(aurel.events.some((e) => e.ev === 'peer:up' && e.data.owner === 'Flo'),
     'Aurel reçoit peer:up pour Flo');
+  ok(aurel.events.some((e) => e.ev === 'peer:up'
+      && e.data.owner === 'Flo' && e.data.version === 'v7.3.0'),
+    'V7.4 — peer:up porte la version de Flo (« v7.3.0 »)');
 
   // --- deliver by owner: Aurel → Flo inbox ---
   flo.events.length = 0;

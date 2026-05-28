@@ -1,5 +1,5 @@
 import { io as ioClient } from 'socket.io-client';
-import { INSTANCE_ID, OWNER, BROKER_URL_DEFAULT, BROKER_TOKEN } from './config.js';
+import { INSTANCE_ID, OWNER, BROKER_URL_DEFAULT, BROKER_TOKEN, VERSION } from './config.js';
 import { getNickname, getBrokerUrl } from './store.js';
 import { peerLog, errLog } from './logger.js';
 
@@ -13,7 +13,7 @@ import { peerLog, errLog } from './logger.js';
 export function createBrokerTransport({ io, onStatus = () => {} }) {
   let socket = null;
   let deliverHandler = () => {};
-  let peers = []; // [{ owner, instanceId, nickname }]
+  let peers = []; // [{ owner, instanceId, nickname, version }]
   let connected = false;
   let currentUrl = null; // the URL we're connected to / last asked to use
 
@@ -45,6 +45,7 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
           owner: OWNER,
           instanceId: INSTANCE_ID,
           nickname: getNickname() || undefined,
+          version: VERSION,
           token: BROKER_TOKEN ?? undefined,
         });
         setConnected(true);
@@ -55,7 +56,9 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
       // our front-ends.
       socket.on('peers', (list) => {
         peers = Array.isArray(list)
-          ? list.map((p) => ({ owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '' }))
+          ? list.map((p) => ({
+              owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+            }))
           : [];
         for (const p of peers) io.emit('peer:up', p);
       });
@@ -63,19 +66,29 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
       socket.on('peer:up', (p) => {
         if (!p?.instanceId) return;
         const entry = peers.find((x) => x.instanceId === p.instanceId);
-        if (entry) entry.nickname = p.nickname || '';
-        else peers.push({ owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '' });
-        io.emit('peer:up', { owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '' });
-        peerLog('peer:up', `${p.owner} en ligne (broker)`, { owner: p.owner });
+        if (entry) { entry.nickname = p.nickname || ''; entry.version = p.version || ''; }
+        else peers.push({
+          owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+        });
+        io.emit('peer:up', {
+          owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+        });
+        peerLog('peer:up', `${p.owner} en ligne (broker) · ${p.version || '?'}`, {
+          owner: p.owner, version: p.version,
+        });
       });
 
       // V7.1 — a peer changed its nickname (no up/down). Update our view and
-      // re-emit peer:up so front-ends upsert the new name.
-      socket.on('profile:update', ({ owner, instanceId, nickname } = {}) => {
+      // re-emit peer:up so front-ends upsert the new name. Version is frozen
+      // for the life of a process, so it doesn't change here — we just relay
+      // whatever the registry has for completeness.
+      socket.on('profile:update', ({ owner, instanceId, nickname, version } = {}) => {
         if (!instanceId) return;
         const entry = peers.find((x) => x.instanceId === instanceId);
         if (entry) entry.nickname = nickname || '';
-        io.emit('peer:up', { owner, instanceId, nickname: nickname || '' });
+        io.emit('peer:up', {
+          owner, instanceId, nickname: nickname || '', version: version || entry?.version || '',
+        });
         peerLog('peer:profile', `${owner} → surnom « ${nickname || '—'} » (broker)`, { owner, nickname });
       });
 
@@ -125,7 +138,9 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
     },
 
     listPeers() {
-      return peers.map((p) => ({ owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '' }));
+      return peers.map((p) => ({
+        owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+      }));
     },
 
     // V7.1 — broadcast our new nickname over the broker. Not a re-register

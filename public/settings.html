@@ -317,6 +317,14 @@
       <button type="button" class="add" id="shortcut-add">+ Ajouter un raccourci</button>
     </section>
 
+    <section>
+      <h2>À propos</h2>
+      <p class="hint" style="margin-bottom: 4px;">Cette installation</p>
+      <div class="hint" id="about-self">—</div>
+      <p class="hint" id="about-peers-label" style="margin: 12px 0 4px;">Pairs</p>
+      <div class="hint" id="about-peers"></div>
+    </section>
+
     <div class="status" id="status"></div>
     <button type="submit" class="save" id="save">Enregistrer</button>
   </form>
@@ -617,6 +625,48 @@
       if (e.key === 'Enter') { e.preventDefault(); putBroker(brokerUrlInput.value.trim()); }
     });
 
+    // ===== About (V7.4 — running version, mine + peers) =====
+    const aboutSelf = document.getElementById('about-self');
+    const aboutPeers = document.getElementById('about-peers');
+    const aboutPeersLabel = document.getElementById('about-peers-label');
+
+    function describePeer(p) {
+      const name = (p.nickname && p.nickname.trim()) ? `${p.owner} (« ${p.nickname} »)` : p.owner;
+      return `${name} · ${p.version || '?'}`;
+    }
+
+    async function loadAbout() {
+      try {
+        const [me, peers] = await Promise.all([
+          (await fetch('/me')).json(),
+          (await fetch('/peers')).json(),
+        ]);
+        const sid = me.instanceId ? me.instanceId.slice(0, 8) : '?';
+        aboutSelf.textContent = `${describePeer(me)} · ${sid}`;
+        aboutPeers.innerHTML = '';
+        aboutPeersLabel.textContent = peers.length ? `Pairs (${peers.length})` : 'Pairs';
+        if (!peers.length) {
+          const empty = document.createElement('div');
+          empty.textContent = 'Aucun pair connecté.';
+          empty.style.opacity = '0.7';
+          aboutPeers.appendChild(empty);
+          return;
+        }
+        for (const p of peers) {
+          const row = document.createElement('div');
+          row.textContent = describePeer(p);
+          aboutPeers.appendChild(row);
+        }
+      } catch {
+        aboutSelf.textContent = '— (erreur de chargement)';
+      }
+    }
+
+    // peer:up is emitted on initial discovery AND when nickname/version changes
+    // (V7.1/V7.4 hot updates). peer:down on departures. Cheap to re-fetch.
+    socket.on('peer:up', loadAbout);
+    socket.on('peer:down', loadAbout);
+
     // ===== Load =====
     async function loadPeers() {
       try {
@@ -702,6 +752,7 @@
     loadTheme();
     loadTransport();
     loadProfile();
+    loadAbout();
   </script>
 </body>
 </html>

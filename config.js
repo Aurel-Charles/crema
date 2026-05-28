@@ -2,8 +2,36 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { hostname } from 'os';
 import { randomUUID } from 'crypto';
+import { execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// V7.4 — running version, frozen at boot. Surfaced in /me and propagated to
+// peers (TXT mDNS + broker register). Pure resolver (env > git describe >
+// "unknown") so it stays testable on the Mac without `.git/` or git installed.
+// `CREMA_VERSION` env wins so the Docker image (which has no `.git/`) can
+// inject the right version via --build-arg at build time.
+export function detectVersion({ env = {}, gitDescribe = () => null } = {}) {
+  const fromEnv = env.CREMA_VERSION;
+  if (typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.trim();
+  const fromGit = gitDescribe();
+  if (typeof fromGit === 'string' && fromGit.trim()) return fromGit.trim();
+  return 'unknown';
+}
+
+export const VERSION = detectVersion({
+  env: process.env,
+  gitDescribe: () => {
+    try {
+      return execSync('git describe --tags --always --dirty', {
+        cwd: __dirname,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).toString();
+    } catch {
+      return null;
+    }
+  },
+});
 
 function deriveOwnerFromHostname() {
   const h = hostname().replace(/\.local$/, '');
@@ -70,9 +98,11 @@ export const IDENTITY_FILE = join(DATA_DIR, 'identity.json');
 // mere seed; empty here = fall back to env, then mDNS discovery. Lives in data/
 // so it's git-ignored and survives restarts.
 export const TRANSPORT_FILE = join(DATA_DIR, 'transport.json');
-// V7.4 — light/dark appearance picked from /settings. A pure presentation layer
-// (CSS-variable remap), persisted per-Pi so the toggle on a phone also re-skins
-// that Pi's screen. Empty/missing = 'light' (the default direction).
+// Dark mode — light/dark appearance picked from /settings. A pure presentation
+// layer (CSS-variable remap), persisted per-Pi so the toggle on a phone also
+// re-skins that Pi's screen. Empty/missing = 'light' (the default direction).
+// Shipped under the v7.3.0 tag without its own roadmap entry; V7.4 is the
+// running-version exposure feature above.
 export const THEME_FILE = join(DATA_DIR, 'theme.json');
 export const HISTORY_DB_FILE = join(DATA_DIR, 'history.db');
 export const PUBLIC_DIR = join(__dirname, 'public');
