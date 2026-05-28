@@ -1,6 +1,6 @@
 # Crema — Spec projet
 
-Système de messagerie local entre Raspberry Pi (trois aujourd'hui : 4B, 3B+ et un 3ᵉ « pi-desk ») équipés d'écrans tactiles (7" cible, 3.5" sur pi-desk), installés en permanent dans une maison partagée. Chaque Pi affiche une horloge/veilleuse au repos. Les messages sont envoyés depuis un téléphone (PWA) ou via raccourcis tactiles directs sur l'écran. Ils peuvent inclure des options de réponse préfabriquées et un TTL exprimant la fenêtre de disponibilité de l'émetteur.
+Système de messagerie local entre Raspberry Pi (cinq aujourd'hui : `pi-aurel`, `pi-slibar`, `pi-desk`, `pi-test` et `flo`) équipés d'écrans tactiles (7" cible, 3.5" sur pi-desk), installés en permanent dans une maison partagée. Chaque Pi affiche une horloge/veilleuse au repos. Les messages sont envoyés depuis un téléphone (PWA) ou via raccourcis tactiles directs sur l'écran. Ils peuvent inclure des options de réponse préfabriquées et un TTL exprimant la fenêtre de disponibilité de l'émetteur.
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
@@ -9,8 +9,12 @@ Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d
 La roadmap V0→V6 est livrée, plus le **transport dual** (V7.0), le **surnom
 d'affichage** (V7.1), le **profil petit écran + watchdog Wi-Fi USB** (V7.2) et
 l'**URL du broker éditable depuis `/settings`** (V7.3).
-Tourne sur **trois Pi** : `pi-aurel`, `pi-slibar` et `pi-desk` (3ᵉ Pi, écran
-tactile 3.5"). Crema est aujourd'hui un
+Tourne sur **cinq Pi** : `pi-aurel`, `pi-slibar`, `pi-desk` (écran tactile
+3.5"), `pi-test` et `flo`. `pi-test` sert à la fois de poste fixe et de banc
+d'essai Ansible. **Tous épinglés sur le broker cloud
+`wss://crema-broker.cloud.110lab.fr`** (opéré par Flo ; voir mémoire
+`cloud-broker-110lab`), pas sur un broker LAN — aucun des Pi maison n'héberge de
+broker, ils en sont tous clients. Crema est aujourd'hui un
 **système pair-à-pair symétrique complet** : code identique sur chaque Pi,
 découverte mDNS automatique, messages/réponses/raccourcis/TTL, historique
 SQLite, accusés "vu" (V6.1) et indicateur de frappe (V6.2). **Aucun serveur
@@ -180,7 +184,7 @@ Symétrique pair-à-pair : **code identique sur chaque Pi**. Chaque Pi expose sa
 
 ## Identité et destinataire
 
-- Chaque Pi a un propriétaire (`pi-aurel` = Aurel, `pi-slibar` = Slibar, `pi-desk` = Desk). Tout message qui sort d'un Pi est signé par son propriétaire.
+- Chaque Pi a un propriétaire (`pi-aurel` = Aurel, `pi-slibar` = Slibar, `pi-desk` = Desk, `flo` = Flo, `pi-test` = Test). Tout message qui sort d'un Pi est signé par son propriétaire.
 - Les réponses atterrissent **sur le Pi de l'émetteur** (l'écran = réceptacle principal, la PWA = juste l'émetteur).
 - Naming des Pi peut inclure la pièce ("Slibar (salon)") quand il y aura plus d'un Pi par personne.
 
