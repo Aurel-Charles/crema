@@ -40,22 +40,34 @@ export function createDualTransport({ io }) {
   // path drops it. Without this, a broker disconnect would wrongly grey out a
   // peer that's still reachable over p2p (and flip the status badge to
   // "hors-ligne" instead of "p2p · direct"). All other events pass through.
-  const sources = new Map(); // instanceId -> { owner, nickname, sources: Set<'p2p'|'broker'> }
+  // V7.4 — version flows through here too: stored in the entry, re-emitted on
+  // change so the front-end picks up upgrades without waiting for a peer:up
+  // from one of the sub-transports.
+  const sources = new Map(); // instanceId -> { owner, nickname, version, sources: Set<'p2p'|'broker'> }
 
   function presenceUp(source, p) {
     if (!p?.instanceId) return;
     let e = sources.get(p.instanceId);
-    if (!e) { e = { owner: p.owner ?? '?', nickname: '', sources: new Set() }; sources.set(p.instanceId, e); }
+    if (!e) { e = { owner: p.owner ?? '?', nickname: '', version: '', sources: new Set() }; sources.set(p.instanceId, e); }
     if (p.owner) e.owner = p.owner;
     const wasEmpty = e.sources.size === 0;
-    // Forward when the peer first comes up OR its nickname changed (V7.1 hot
-    // update): peer:up is an idempotent upsert on the front-end side, so
-    // re-emitting on a name change is safe and is how nickname edits land.
+    // Forward when the peer first comes up OR its nickname/version changed
+    // (V7.1 / V7.4 hot updates): peer:up is an idempotent upsert on the
+    // front-end side, so re-emitting is safe and is how nickname edits and
+    // version bumps land.
     const nick = p.nickname || '';
     const nickChanged = nick !== e.nickname;
     e.nickname = nick;
+    const ver = p.version || '';
+    // Only treat a non-empty incoming version as a change: an empty value from
+    // one source (e.g. p2p before V7.4 announce caught up) must not clobber a
+    // good value from the other.
+    const verChanged = ver && ver !== e.version;
+    if (ver) e.version = ver;
     e.sources.add(source);
-    if (wasEmpty || nickChanged) io.emit('peer:up', { instanceId: p.instanceId, owner: e.owner, nickname: e.nickname });
+    if (wasEmpty || nickChanged || verChanged) {
+      io.emit('peer:up', { instanceId: p.instanceId, owner: e.owner, nickname: e.nickname, version: e.version });
+    }
   }
 
   function presenceDown(source, p) {
@@ -165,7 +177,9 @@ export function createDualTransport({ io }) {
     listPeers() {
       // Derived from the presence aggregator so a fresh client's peers:init
       // matches the net peer:up/peer:down stream exactly.
-      return [...sources.entries()].map(([instanceId, e]) => ({ instanceId, owner: e.owner, nickname: e.nickname }));
+      return [...sources.entries()].map(([instanceId, e]) => ({
+        instanceId, owner: e.owner, nickname: e.nickname, version: e.version || '',
+      }));
     },
 
     findPeer(desc) {
