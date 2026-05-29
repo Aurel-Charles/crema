@@ -277,6 +277,21 @@
     /* Le titre de section reprend la teinte de sa bande — petit clin d'œil */
     .col section h2 { color: var(--band, var(--crema-text)); }
 
+    /* Badge « version différente de la mienne » (V7.5) — reprend la bande de section */
+    .ver-badge {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 1px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.5;
+      border-radius: 999px;
+      vertical-align: middle;
+      color: var(--band, var(--crema-accent));
+      background: color-mix(in srgb, var(--band, var(--crema-accent)) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--band, var(--crema-accent)) 45%, transparent);
+    }
+
     /* ===== Desktop (≥900px) — grille 2 colonnes ============================== */
     @media (min-width: 900px) {
       header {
@@ -705,6 +720,27 @@
       return `${name} · ${p.version || '?'}`;
     }
 
+    // V7.5 — comparaison binaire : on ne signale que si les deux versions sont
+    // connues et réellement distinctes (un '?' ne déclenche pas de badge).
+    function versionDiffers(peerVersion, myVersion) {
+      return !!peerVersion && !!myVersion && peerVersion !== myVersion;
+    }
+
+    function peerRow(p, myVersion) {
+      const row = document.createElement('div');
+      const label = document.createElement('span');
+      label.textContent = describePeer(p);
+      row.appendChild(label);
+      if (versionDiffers(p.version, myVersion)) {
+        const badge = document.createElement('span');
+        badge.className = 'ver-badge';
+        badge.textContent = '≠ version';
+        badge.title = `Version différente de la tienne (${myVersion})`;
+        row.appendChild(badge);
+      }
+      return row;
+    }
+
     async function loadAbout() {
       try {
         const [me, peers] = await Promise.all([
@@ -723,9 +759,7 @@
           return;
         }
         for (const p of peers) {
-          const row = document.createElement('div');
-          row.textContent = describePeer(p);
-          aboutPeers.appendChild(row);
+          aboutPeers.appendChild(peerRow(p, me.version));
         }
       } catch {
         aboutSelf.textContent = '— (erreur de chargement)';
