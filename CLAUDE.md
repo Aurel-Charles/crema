@@ -4,12 +4,13 @@ Système de messagerie local entre Raspberry Pi (cinq aujourd'hui : `pi-aurel`, 
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
-## Étape actuelle : V7.4 (version exposée dans /me + propagée aux pairs)
+## Étape actuelle : V7.5 (badge UI quand un pair tourne sur une autre version)
 
 La roadmap V0→V6 est livrée, plus le **transport dual** (V7.0), le **surnom
 d'affichage** (V7.1), le **profil petit écran + watchdog Wi-Fi USB** (V7.2),
-l'**URL du broker éditable depuis `/settings`** (V7.3) et la **version
-runtime exposée et propagée** (V7.4).
+l'**URL du broker éditable depuis `/settings`** (V7.3), la **version
+runtime exposée et propagée** (V7.4) et le **badge « version différente »**
+(V7.5).
 Tourne sur **cinq Pi** : `pi-aurel`, `pi-slibar`, `pi-desk` (écran tactile
 3.5"), `pi-test` et `flo`. `pi-test` sert à la fois de poste fixe et de banc
 d'essai Ansible. **Tous épinglés sur un broker cloud
@@ -186,13 +187,15 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - ✅ **V7.2** — Profil petit écran (`sm`, pi-desk 3.5") + watchdog Wi-Fi USB (récupération auto du dongle `rtl8xxxu`)
 - ✅ **V7.3** — URL du broker éditable depuis `/settings` (override persisté `data/transport.json` > env > mDNS), re-pointage à chaud sans restart ni sudo
 - ✅ **V7.4** — Version runtime exposée dans `/me` et propagée aux pairs (TXT mDNS + broker `register`/`roster`/`peer:up`), affichée dans `/settings` (section « À propos », mon Pi + pairs). Docker reçoit la version via `--build-arg GIT_DESCRIBE` au build CI.
+- ✅ **V7.5** — Badge UI dans la section « À propos » de `/settings` quand un pair tourne sur une version différente de ce Pi. Pure présentation au-dessus des données V7.4 : comparaison **binaire** (badge affiché seulement si les deux versions sont connues et distinctes, un pair en version inconnue `?` ne déclenche rien), couleur reprise de la bande de section. Pas de nouvelle donnée, pas de dépendance, pas de migration.
 
 Roadmap initiale livrée, puis étendue (transport dual, surnom, profil petit
-écran + watchdog Wi-Fi, URL broker éditable, version exposée). Pistes encore
-ouvertes : accès hors domicile, multi-Pi par personne (labels de pièce),
-badge UI quand un pair tourne sur une version différente (V7.5 candidate
-naturelle vu que V7.4 vient de poser les données). Chaque version est restée
-indépendamment utile.
+écran + watchdog Wi-Fi, URL broker éditable, version exposée, badge version
+différente). Pistes encore ouvertes : accès hors domicile, multi-Pi par
+personne (labels de pièce), comparaison sémantique « plus ancien / plus
+récent » au lieu du simple ≠ (V7.6 candidate, demanderait un parsing semver
+robuste face aux versions `git describe` non taggées/dirty). Chaque version
+est restée indépendamment utile.
 
 ## Architecture cible (V1+)
 
