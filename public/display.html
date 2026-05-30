@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Crema — Display</title>
   <script src="/appearance.js"></script>
+  <script src="/about.js"></script>
   <link rel="stylesheet" href="/theme.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -90,6 +91,105 @@
       fill: var(--crema-bg);
       stroke: var(--crema-bg);
     }
+
+    /* Left cluster — keeps DND + gear together so the topbar still has two
+     * logical children (cluster vs presence), preserving the sm space-between. */
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      pointer-events: none;
+    }
+    /* Gear — same discreet circular hit-target as the DND moon. */
+    .gear-btn {
+      pointer-events: auto;
+      position: relative;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 50%;
+      color: var(--crema-muted);
+      cursor: pointer;
+      transition: color 0.2s ease, background 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .gear-btn:active { background: rgba(232, 137, 110, 0.18); }
+    .gear-btn svg { width: 22px; height: 22px; }
+
+    /* ===== Gear panel — overlay over the stage ===== */
+    .gear-panel {
+      position: absolute;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--crema-bg) 78%, transparent);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+    }
+    .gear-panel[hidden] { display: none; }
+    .gp-card {
+      position: relative;
+      width: min(560px, 80%);
+      max-height: 84%;
+      overflow-y: auto;
+      background: var(--crema-bg);
+      border: 1px solid var(--crema-stroke);
+      border-radius: 20px;
+      padding: 26px 30px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+      color: var(--crema-text);
+    }
+    .gp-close {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 50%;
+      color: var(--crema-muted);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .gp-close:active { background: rgba(232, 137, 110, 0.18); }
+    .gp-title { margin: 0 0 20px; font-size: 22px; font-weight: 600; }
+    .gp-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .gp-label { font-size: 17px; }
+    .gp-hint { font-size: 13px; color: var(--crema-muted); margin-top: 3px; }
+    .gp-about {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--crema-stroke);
+    }
+    .gp-section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--crema-muted);
+      margin-bottom: 10px;
+    }
+    .gp-self { font-size: 15px; }
+    .gp-peers-label { font-size: 13px; color: var(--crema-muted); margin: 12px 0 4px; }
+    .gp-peers div { font-size: 14px; margin: 3px 0; }
+
     .presence {
       display: flex;
       align-items: center;
@@ -866,6 +966,16 @@
     }
     body.screen-sm .dnd-btn { width: 84px; height: 84px; }
     body.screen-sm .dnd-btn .moon { width: 44px; height: 44px; }
+    body.screen-sm .topbar-left { gap: 8px; }
+    body.screen-sm .gear-btn { width: 84px; height: 84px; }
+    body.screen-sm .gear-btn svg { width: 40px; height: 40px; }
+    body.screen-sm .gp-card { width: 86%; max-height: 88%; padding: 22px 24px; }
+    body.screen-sm .gp-title { font-size: 26px; }
+    body.screen-sm .gp-label { font-size: 21px; }
+    body.screen-sm .gp-hint { font-size: 15px; }
+    body.screen-sm .gp-close { width: 56px; height: 56px; font-size: 30px; }
+    body.screen-sm .gp-self { font-size: 18px; }
+    body.screen-sm .gp-peers div { font-size: 17px; }
     body.screen-sm #presence-list {
       display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     }
@@ -930,11 +1040,19 @@
 <body class="crema-display night">
   <div class="stage">
   <header class="topbar">
-    <button id="dnd-btn" class="dnd-btn" type="button" aria-label="Ne pas déranger">
-      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-      </svg>
-    </button>
+    <div class="topbar-left">
+      <button id="dnd-btn" class="dnd-btn" type="button" aria-label="Ne pas déranger">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+      <button id="gear-btn" class="gear-btn" type="button" aria-label="Réglages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
     <div id="presence-list"></div>
   </header>
 
@@ -965,6 +1083,33 @@
       <div class="tp-title">Destinataire ?</div>
       <div class="tp-tiles" id="tp-tiles"></div>
       <button class="tp-valider" id="tp-valider" type="button">Valider</button>
+    </div>
+  </div>
+
+  <!-- Gear panel — opened by the topbar gear (idle). Dark/light toggle +
+       « À propos » (this Pi + peers, V7.5 version badge). Closes on tap-outside
+       or when a message arrives (see openGear/closeGear in the script). -->
+  <div id="gear-panel" class="gear-panel" hidden>
+    <div class="gp-card">
+      <button id="gear-close" class="gp-close" type="button" aria-label="Fermer">✕</button>
+      <h2 class="gp-title">Réglages</h2>
+
+      <div class="gp-row">
+        <div>
+          <div class="gp-label">Mode sombre</div>
+          <div class="gp-hint">Force le thème nuit. Sinon, suit le jour/nuit automatique.</div>
+        </div>
+        <button type="button" class="toggle" id="gear-theme-toggle" aria-pressed="false" aria-label="Mode sombre">
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+
+      <div class="gp-about">
+        <div class="gp-section-title">À propos</div>
+        <div class="gp-self" id="gp-about-self">—</div>
+        <div class="gp-peers-label" id="gp-about-peers-label">Pairs</div>
+        <div class="gp-peers" id="gp-about-peers"></div>
+      </div>
     </div>
   </div>
   </div>
@@ -1153,6 +1298,7 @@
 
     function showMessage(data) {
       mode = 'message';
+      closeGear();      // an incoming message takes over the screen
       renderDestBar();  // hides the global recipient bar while a message shows
       // Use arrivedAt if set (message was queued), else stamp now.
       // This keeps the "il y a Xs" subtitle honest for drained messages.
@@ -1906,6 +2052,79 @@
       }
       renderPresence();
     });
+
+    // ===== Gear panel (V7.6) — dark/light toggle + « À propos » =====
+    const gearBtn = document.getElementById('gear-btn');
+    const gearPanel = document.getElementById('gear-panel');
+    const gearClose = document.getElementById('gear-close');
+    const gearThemeToggle = document.getElementById('gear-theme-toggle');
+    const gpSelf = document.getElementById('gp-about-self');
+    const gpPeers = document.getElementById('gp-about-peers');
+    const gpPeersLabel = document.getElementById('gp-about-peers-label');
+
+    function gearAbout() {
+      return window.cremaAbout.render({
+        selfEl: gpSelf, peersEl: gpPeers, peersLabelEl: gpPeersLabel,
+      });
+    }
+
+    function openGear() {
+      gearPanel.hidden = false;
+      gearAbout();        // refresh roster/versions each open
+      loadGearTheme();    // reflect the persisted light/dark choice
+    }
+    // Declared (not arrow) so showMessage() can call it before this block runs.
+    function closeGear() {
+      if (gearPanel) gearPanel.hidden = true;
+    }
+
+    gearBtn.addEventListener('click', () => {
+      gearPanel.hidden ? openGear() : closeGear();
+    });
+    gearClose.addEventListener('click', closeGear);
+    // Tap on the backdrop (outside the card) closes; taps inside don't bubble here.
+    gearPanel.addEventListener('click', (e) => { if (e.target === gearPanel) closeGear(); });
+
+    // Keep the « À propos » list fresh while the panel is open.
+    socket.on('peer:up', () => { if (!gearPanel.hidden) gearAbout(); });
+    socket.on('peer:down', () => { if (!gearPanel.hidden) gearAbout(); });
+
+    // — Dark/light toggle — mirrors /settings: GET/PUT /theme, optimistic skin
+    //   via cremaApplyTheme (appearance.js re-skins the whole screen live), with
+    //   rollback on failure. theme:updated keeps the switch in step with a change
+    //   made elsewhere (the phone, another tab).
+    function reflectGearTheme(dark) {
+      gearThemeToggle.setAttribute('aria-pressed', String(dark === true));
+    }
+    async function loadGearTheme() {
+      try {
+        const { theme } = await (await fetch('/theme')).json();
+        reflectGearTheme(theme === 'dark');
+      } catch {}
+    }
+    async function setGearTheme(dark) {
+      const prev = gearThemeToggle.getAttribute('aria-pressed') === 'true';
+      gearThemeToggle.disabled = true;
+      reflectGearTheme(dark);
+      window.cremaApplyTheme?.(dark ? 'dark' : 'light');
+      try {
+        const r = await fetch('/theme', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme: dark ? 'dark' : 'light' }),
+        });
+        if (!r.ok) throw new Error();
+      } catch {
+        reflectGearTheme(prev);
+        window.cremaApplyTheme?.(prev ? 'dark' : 'light');
+      } finally {
+        gearThemeToggle.disabled = false;
+      }
+    }
+    gearThemeToggle.addEventListener('click', () => {
+      setGearTheme(gearThemeToggle.getAttribute('aria-pressed') !== 'true');
+    });
+    socket.on('theme:updated', ({ theme } = {}) => reflectGearTheme(theme === 'dark'));
   </script>
 </body>
 </html>

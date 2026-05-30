@@ -378,3 +378,55 @@ body.crema-display .shortcut-btn:active {
 
 /* Toggle settings : un knob couleur surface disparaîtrait sur la piste sombre. */
 [data-theme="dark"] .toggle .toggle-knob { background: var(--crema-text); }
+
+/* ==========================================================================
+ * Composants partagés — utilisés par /settings ET le panneau gear de l'écran
+ * (V7.6). Centralisés ici pour une source unique (le dark-override du knob
+ * ci-dessus vivait déjà côté theme.css).
+ * ====================================================================== */
+
+/* Interrupteur light/dark & DND — base claire ; le dark-mode du knob plus haut. */
+.toggle {
+  flex-shrink: 0;
+  position: relative;
+  width: 52px;
+  height: 32px;
+  padding: 0;
+  background: var(--crema-stroke);
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.toggle .toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  background: var(--crema-surface);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+.toggle[aria-pressed="true"] { background: var(--crema-accent); }
+.toggle[aria-pressed="true"] .toggle-knob { transform: translateX(20px); }
+.toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Badge « version différente de la mienne » (V7.5). Reprend la teinte de bande
+ * de section via --band sur /settings ; retombe sur --crema-accent ailleurs
+ * (ex. panneau gear de l'écran, sans bandes Currents). */
+.ver-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  border-radius: 999px;
+  vertical-align: middle;
+  color: var(--band, var(--crema-accent));
+  background: color-mix(in srgb, var(--band, var(--crema-accent)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--band, var(--crema-accent)) 45%, transparent);
+}
