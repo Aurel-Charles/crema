@@ -12,6 +12,7 @@
   <link rel="apple-touch-icon" href="/icon.svg" />
   <title>Crema — Préférences</title>
   <script src="/appearance.js"></script>
+  <script src="/about.js"></script>
   <link rel="stylesheet" href="/theme.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -80,33 +81,7 @@
     .dnd-row .copy { flex: 1; min-width: 0; }
     .dnd-row h2 { margin: 0 0 4px; }
     .dnd-row .hint { margin: 0; }
-    .toggle {
-      flex-shrink: 0;
-      position: relative;
-      width: 52px;
-      height: 32px;
-      padding: 0;
-      background: var(--crema-stroke);
-      border: none;
-      border-radius: 16px;
-      cursor: pointer;
-      transition: background 0.2s ease;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .toggle .toggle-knob {
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 26px;
-      height: 26px;
-      background: var(--crema-surface);
-      border-radius: 50%;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-      transition: transform 0.2s ease;
-    }
-    .toggle[aria-pressed="true"] { background: var(--crema-accent); }
-    .toggle[aria-pressed="true"] .toggle-knob { transform: translateX(20px); }
-    .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* .toggle vit désormais dans theme.css (composant partagé avec l'écran). */
 
     /* Rows (replies) */
     .rows { display: flex; flex-direction: column; gap: 10px; }
@@ -277,20 +252,8 @@
     /* Le titre de section reprend la teinte de sa bande — petit clin d'œil */
     .col section h2 { color: var(--band, var(--crema-text)); }
 
-    /* Badge « version différente de la mienne » (V7.5) — reprend la bande de section */
-    .ver-badge {
-      display: inline-block;
-      margin-left: 8px;
-      padding: 1px 8px;
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1.5;
-      border-radius: 999px;
-      vertical-align: middle;
-      color: var(--band, var(--crema-accent));
-      background: color-mix(in srgb, var(--band, var(--crema-accent)) 14%, transparent);
-      border: 1px solid color-mix(in srgb, var(--band, var(--crema-accent)) 45%, transparent);
-    }
+    /* .ver-badge (V7.5) vit désormais dans theme.css (partagé avec l'écran) ;
+     * ici --band lui donne la teinte de la bande « À propos » (magenta). */
 
     /* ===== Desktop (≥900px) — grille 2 colonnes ============================== */
     @media (min-width: 900px) {
@@ -715,55 +678,14 @@
     const aboutPeers = document.getElementById('about-peers');
     const aboutPeersLabel = document.getElementById('about-peers-label');
 
-    function describePeer(p) {
-      const name = (p.nickname && p.nickname.trim()) ? `${p.owner} (« ${p.nickname} »)` : p.owner;
-      return `${name} · ${p.version || '?'}`;
-    }
-
-    // V7.5 — comparaison binaire : on ne signale que si les deux versions sont
-    // connues et réellement distinctes (un '?' ne déclenche pas de badge).
-    function versionDiffers(peerVersion, myVersion) {
-      return !!peerVersion && !!myVersion && peerVersion !== myVersion;
-    }
-
-    function peerRow(p, myVersion) {
-      const row = document.createElement('div');
-      const label = document.createElement('span');
-      label.textContent = describePeer(p);
-      row.appendChild(label);
-      if (versionDiffers(p.version, myVersion)) {
-        const badge = document.createElement('span');
-        badge.className = 'ver-badge';
-        badge.textContent = '≠ version';
-        badge.title = `Version différente de la tienne (${myVersion})`;
-        row.appendChild(badge);
-      }
-      return row;
-    }
-
-    async function loadAbout() {
-      try {
-        const [me, peers] = await Promise.all([
-          (await fetch('/me')).json(),
-          (await fetch('/peers')).json(),
-        ]);
-        const sid = me.instanceId ? me.instanceId.slice(0, 8) : '?';
-        aboutSelf.textContent = `${describePeer(me)} · ${sid}`;
-        aboutPeers.innerHTML = '';
-        aboutPeersLabel.textContent = peers.length ? `Pairs (${peers.length})` : 'Pairs';
-        if (!peers.length) {
-          const empty = document.createElement('div');
-          empty.textContent = 'Aucun pair connecté.';
-          empty.style.opacity = '0.7';
-          aboutPeers.appendChild(empty);
-          return;
-        }
-        for (const p of peers) {
-          aboutPeers.appendChild(peerRow(p, me.version));
-        }
-      } catch {
-        aboutSelf.textContent = '— (erreur de chargement)';
-      }
+    // Rendu délégué au module partagé public/about.js (window.cremaAbout) —
+    // même logique sur l'écran (panneau gear, V7.6).
+    function loadAbout() {
+      return window.cremaAbout.render({
+        selfEl: aboutSelf,
+        peersEl: aboutPeers,
+        peersLabelEl: aboutPeersLabel,
+      });
     }
 
     // peer:up is emitted on initial discovery AND when nickname/version changes
