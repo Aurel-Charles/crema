@@ -10,7 +10,8 @@
 #                   Chromium when the code actually changed
 #   --tags service  only the systemd server unit
 #   --tags transport  only the broker pin drop-in (hosts with crema_broker_url)
-#   --tags display  only the Chromium kiosk autostart
+#   --tags display  the Chromium kiosk autostart + the per-Pi screen profile
+#                   (set crema_screen=sm to apply it; reloads the kiosk after)
 #   --tags watchdog  only the USB Wi-Fi watchdog (wifi_dongle group)
 #   --tags reload   force restart Node + reload Chromium, no pull (opt-in)
 #   --tags reboot   reboot the targeted Pis, one at a time (opt-in, never auto)
@@ -126,6 +127,7 @@
     # server start — so on a freshly cloned Pi it doesn't exist yet, and the
     # copy below (which doesn't create parent dirs) would fail. Create it first.
     - name: Ensure data directory exists
+      tags: [display]
       ansible.builtin.file:
         path: "{{ crema_dir }}/data"
         state: directory
@@ -133,11 +135,13 @@
       when: crema_screen | default('') | length > 0
 
     - name: Set screen profile
+      tags: [display]
       ansible.builtin.copy:
         dest: "{{ crema_dir }}/data/screen-profile"
         content: "{{ crema_screen }}\n"
         mode: "0644"
       when: crema_screen | default('') | length > 0
+      notify: Reload display
 
     # install-pi.sh step 1: systemd unit for the Node server.
     - name: Install crema.service
