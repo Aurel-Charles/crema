@@ -4,13 +4,14 @@ Système de messagerie local entre Raspberry Pi (cinq aujourd'hui : `pi-aurel`, 
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
-## Étape actuelle : V7.5 (badge UI quand un pair tourne sur une autre version)
+## Étape actuelle : V7.6 (panneau gear sur l'écran : toggle clair/sombre + À propos)
 
 La roadmap V0→V6 est livrée, plus le **transport dual** (V7.0), le **surnom
 d'affichage** (V7.1), le **profil petit écran + watchdog Wi-Fi USB** (V7.2),
 l'**URL du broker éditable depuis `/settings`** (V7.3), la **version
-runtime exposée et propagée** (V7.4) et le **badge « version différente »**
-(V7.5).
+runtime exposée et propagée** (V7.4), le **badge « version différente »**
+(V7.5) et le **panneau gear sur l'écran** (toggle clair/sombre + section
+« À propos », V7.6).
 Tourne sur **cinq Pi** : `pi-aurel`, `pi-slibar`, `pi-desk` (écran tactile
 3.5"), `pi-test` et `flo`. `pi-test` sert à la fois de poste fixe et de banc
 d'essai Ansible. **Tous épinglés sur un broker cloud
@@ -50,6 +51,25 @@ Côté Docker, l'image embarque la version via `--build-arg GIT_DESCRIBE` au
 build CI (`.git/` absent du container). Pas de dépendance nouvelle, pas de
 migration. Voir `test/version.test.js`.
 
+**Panneau gear sur l'écran (V7.6)** : un bouton **engrenage** discret dans la
+topbar idle (à côté du DND, dans un cluster `.topbar-left` qui préserve le
+`space-between` du profil `sm`) ouvre un **overlay** au-dessus du stage portant
+deux choses : (1) un **toggle clair/sombre** et (2) la section **« À propos »**
+(ce Pi + pairs + badge `≠ version` V7.5), jusque-là réservée à `/settings`.
+Pure présentation au-dessus de l'existant — **aucun backend, aucune migration,
+aucune dépendance**. Le toggle **miroite** celui de `/settings` (`GET/PUT
+/theme`, application optimiste via `cremaApplyTheme`/`appearance.js`, rollback
+sur échec, resync via l'event `theme:updated`) : même sémantique qu'avant — ON
+force le skin nuit indigo, OFF suit le jour/nuit automatique (SunCalc). Le Pi
+peut donc être reskinné **depuis son propre écran**, plus seulement depuis le
+téléphone (propagation bidirectionnelle). Le panneau se ferme sur ✕, tap
+hors-carte, et **automatiquement à l'arrivée d'un message** (`showMessage`) ;
+overrides `screen-sm` pour le 3.5" de pi-desk. **Réutilisation plutôt que
+duplication** : la logique « À propos » (+ badge V7.5) vit désormais dans un
+module partagé `public/about.js` (`window.cremaAbout`), consommé par `/settings`
+**et** l'écran ; les composants CSS `.toggle` et `.ver-badge` ont migré dans
+`theme.css`.
+
 **Architecture en place** :
 - **Découverte** : `peers.js` — chaque Pi s'annonce et browse le service mDNS
   `crema`, maintient une `peerMap`. Health-check `/me` toutes les 10s (drop
@@ -81,7 +101,7 @@ migration. Voir `test/version.test.js`.
 - `store.js` — réponses par défaut, raccourcis, DND (JSON dans `data/`)
 - `db.js` — historique SQLite
 - `logger.js` — logs structurés vers `/logs` + Socket.IO
-- `public/` — `index.html` (PWA), `display.html` (écran), `settings.html`, `history.html`, `logs.html`, `theme.css`
+- `public/` — `index.html` (PWA), `display.html` (écran), `settings.html`, `history.html`, `logs.html`, `theme.css`, `appearance.js` (bootstrap thème light/dark partagé), `about.js` (rendu « À propos » partagé `/settings` + écran, V7.6)
 - `broker/` — le relais LAN autonome (`server.js`, `install-broker.sh`, `start-broker.sh`, `test-protocol.mjs`)
 - `install-pi.sh`, `start.sh`, `start-display.sh` — setup/lancement Pi
 - `pin-broker.sh` (dual + URL épinglée), `reset-transport.sh` (retour dual+découverte), `disable-broker.sh` (force p2p), `enable-broker.sh` (force broker pur) — bascule transport
@@ -188,14 +208,15 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - ✅ **V7.3** — URL du broker éditable depuis `/settings` (override persisté `data/transport.json` > env > mDNS), re-pointage à chaud sans restart ni sudo
 - ✅ **V7.4** — Version runtime exposée dans `/me` et propagée aux pairs (TXT mDNS + broker `register`/`roster`/`peer:up`), affichée dans `/settings` (section « À propos », mon Pi + pairs). Docker reçoit la version via `--build-arg GIT_DESCRIBE` au build CI.
 - ✅ **V7.5** — Badge UI dans la section « À propos » de `/settings` quand un pair tourne sur une version différente de ce Pi. Pure présentation au-dessus des données V7.4 : comparaison **binaire** (badge affiché seulement si les deux versions sont connues et distinctes, un pair en version inconnue `?` ne déclenche rien), couleur reprise de la bande de section. Pas de nouvelle donnée, pas de dépendance, pas de migration.
+- ✅ **V7.6** — Panneau gear sur l'écran : un bouton engrenage discret (topbar idle, à côté du DND) ouvre un overlay portant un **toggle clair/sombre** (miroir de `/settings` : `GET/PUT /theme`, optimiste via `appearance.js`, resync `theme:updated`, reskin bidirectionnel écran↔téléphone) et la section **« À propos »** (ce Pi + pairs + badge `≠ version` V7.5). Ferme sur ✕/tap-outside/arrivée de message ; overrides `screen-sm`. Logique « À propos » extraite dans un module partagé `public/about.js`, CSS `.toggle`/`.ver-badge` migrés dans `theme.css`. Pas de backend, pas de dépendance, pas de migration.
 
 Roadmap initiale livrée, puis étendue (transport dual, surnom, profil petit
 écran + watchdog Wi-Fi, URL broker éditable, version exposée, badge version
-différente). Pistes encore ouvertes : accès hors domicile, multi-Pi par
-personne (labels de pièce), comparaison sémantique « plus ancien / plus
-récent » au lieu du simple ≠ (V7.6 candidate, demanderait un parsing semver
-robuste face aux versions `git describe` non taggées/dirty). Chaque version
-est restée indépendamment utile.
+différente, panneau gear). Pistes encore ouvertes : accès hors domicile,
+multi-Pi par personne (labels de pièce), comparaison sémantique « plus ancien /
+plus récent » au lieu du simple ≠ (**V7.7 candidate**, demanderait un parsing
+semver robuste face aux versions `git describe` non taggées/dirty). Chaque
+version est restée indépendamment utile.
 
 ## Architecture cible (V1+)
 
