@@ -6,6 +6,7 @@
   <title>Crema — Display</title>
   <script src="/appearance.js"></script>
   <script src="/about.js"></script>
+  <script src="/theme-toggle.js"></script>
   <link rel="stylesheet" href="/theme.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -2062,6 +2063,11 @@
     const gpPeers = document.getElementById('gp-about-peers');
     const gpPeersLabel = document.getElementById('gp-about-peers-label');
 
+    // Dark/light toggle — shared wiring (theme-toggle.js), same logic as
+    // /settings: optimistic skin via cremaApplyTheme, rollback on PUT failure,
+    // theme:updated resync. So the Pi can be re-skinned from its own screen.
+    const gearTheme = window.cremaThemeToggle.bind(gearThemeToggle, socket);
+
     function gearAbout() {
       return window.cremaAbout.render({
         selfEl: gpSelf, peersEl: gpPeers, peersLabelEl: gpPeersLabel,
@@ -2071,7 +2077,7 @@
     function openGear() {
       gearPanel.hidden = false;
       gearAbout();        // refresh roster/versions each open
-      loadGearTheme();    // reflect the persisted light/dark choice
+      gearTheme.load();   // reflect the persisted light/dark choice
     }
     // Declared (not arrow) so showMessage() can call it before this block runs.
     function closeGear() {
@@ -2088,43 +2094,6 @@
     // Keep the « À propos » list fresh while the panel is open.
     socket.on('peer:up', () => { if (!gearPanel.hidden) gearAbout(); });
     socket.on('peer:down', () => { if (!gearPanel.hidden) gearAbout(); });
-
-    // — Dark/light toggle — mirrors /settings: GET/PUT /theme, optimistic skin
-    //   via cremaApplyTheme (appearance.js re-skins the whole screen live), with
-    //   rollback on failure. theme:updated keeps the switch in step with a change
-    //   made elsewhere (the phone, another tab).
-    function reflectGearTheme(dark) {
-      gearThemeToggle.setAttribute('aria-pressed', String(dark === true));
-    }
-    async function loadGearTheme() {
-      try {
-        const { theme } = await (await fetch('/theme')).json();
-        reflectGearTheme(theme === 'dark');
-      } catch {}
-    }
-    async function setGearTheme(dark) {
-      const prev = gearThemeToggle.getAttribute('aria-pressed') === 'true';
-      gearThemeToggle.disabled = true;
-      reflectGearTheme(dark);
-      window.cremaApplyTheme?.(dark ? 'dark' : 'light');
-      try {
-        const r = await fetch('/theme', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ theme: dark ? 'dark' : 'light' }),
-        });
-        if (!r.ok) throw new Error();
-      } catch {
-        reflectGearTheme(prev);
-        window.cremaApplyTheme?.(prev ? 'dark' : 'light');
-      } finally {
-        gearThemeToggle.disabled = false;
-      }
-    }
-    gearThemeToggle.addEventListener('click', () => {
-      setGearTheme(gearThemeToggle.getAttribute('aria-pressed') !== 'true');
-    });
-    socket.on('theme:updated', ({ theme } = {}) => reflectGearTheme(theme === 'dark'));
   </script>
 </body>
 </html>
