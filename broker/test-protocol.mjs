@@ -36,7 +36,7 @@ try {
   // --- Aurel registers (alone) ---
   const aurel = client();
   await new Promise((r) => aurel.s.on('connect', r));
-  aurel.s.emit('register', { owner: 'Aurel', instanceId: 'aurel-1', nickname: 'Bureau', version: 'v7.4.0' });
+  aurel.s.emit('register', { owner: 'Aurel', instanceId: 'aurel-1', nickname: 'Bureau', version: 'v7.4.0', status: { label: 'Occupé', icon: '⛔', color: '#E06C5A' } });
   await wait(200);
   ok(aurel.events.some((e) => e.ev === 'peers' && e.data.length === 0),
     'Aurel reçoit un roster vide (seul)');
@@ -54,6 +54,9 @@ try {
   ok(flo.events.some((e) => e.ev === 'peers'
       && e.data.some((p) => p.owner === 'Aurel' && p.version === 'v7.4.0')),
     'V7.4 — le roster porte la version d’Aurel (« v7.4.0 »)');
+  ok(flo.events.some((e) => e.ev === 'peers'
+      && e.data.some((p) => p.owner === 'Aurel' && p.status && p.status.label === 'Occupé')),
+    'V7.7 — le roster porte le statut d’Aurel (« Occupé »)');
   ok(aurel.events.some((e) => e.ev === 'peer:up' && e.data.owner === 'Flo'),
     'Aurel reçoit peer:up pour Flo');
   ok(aurel.events.some((e) => e.ev === 'peer:up'
@@ -85,11 +88,14 @@ try {
   // --- profile:update (V7.1): Aurel renomme → Flo est notifié, pas Aurel ---
   flo.events.length = 0;
   aurel.events.length = 0;
-  aurel.s.emit('profile:update', { nickname: 'Salon' });
+  aurel.s.emit('profile:update', { nickname: 'Salon', status: { label: 'En réunion', icon: '📵', color: '#F4A65A' } });
   await wait(150);
   ok(flo.events.some((e) => e.ev === 'profile:update' && e.data.owner === 'Aurel'
       && e.data.instanceId === 'aurel-1' && e.data.nickname === 'Salon'),
     'Flo reçoit le profile:update d’Aurel (owner immuable, surnom « Salon »)');
+  ok(flo.events.some((e) => e.ev === 'profile:update' && e.data.owner === 'Aurel'
+      && e.data.status && e.data.status.label === 'En réunion'),
+    'V7.7 — le profile:update relaie le statut d’Aurel (« En réunion »)');
   ok(!aurel.events.some((e) => e.ev === 'profile:update'),
     'Aurel ne se reçoit pas lui-même (broadcast aux autres seulement)');
 
