@@ -15,7 +15,9 @@ export function startBroker({
   token = process.env.CREMA_BROKER_TOKEN ?? null,
   advertise = process.env.CREMA_BROKER_ADVERTISE !== '0',
 } = {}) {
-  // owner -> { socket, instanceId, nickname, version }
+  // owner -> { socket, instanceId, nickname, version, status }
+  // status (V7.7) is an opaque presentation object the broker stores and relays
+  // verbatim — peers re-validate it on receipt, so the relay stays dumb.
   const registry = new Map();
   let advertisement = null;
 
@@ -26,7 +28,7 @@ export function startBroker({
       res.end(JSON.stringify({
         ok: true,
         peers: [...registry.entries()].map(([owner, entry]) => ({
-          owner, nickname: entry.nickname || '', version: entry.version || '',
+          owner, nickname: entry.nickname || '', version: entry.version || '', status: entry.status ?? null,
         })),
       }));
       return;
@@ -43,6 +45,7 @@ export function startBroker({
       if (owner === exceptOwner) continue;
       list.push({
         owner, instanceId: entry.instanceId, nickname: entry.nickname || '', version: entry.version || '',
+        status: entry.status ?? null,
       });
     }
     return list;
@@ -62,7 +65,7 @@ export function startBroker({
   }
 
   io.on('connection', (socket) => {
-    socket.on('register', ({ owner, instanceId, nickname, version, token: peerToken } = {}) => {
+    socket.on('register', ({ owner, instanceId, nickname, version, status, token: peerToken } = {}) => {
       if (token && peerToken !== token) {
         socket.emit('register:denied', { error: 'bad token' });
         socket.disconnect(true);
@@ -88,26 +91,32 @@ export function startBroker({
       socket.data.instanceId = instanceId;
       socket.data.nickname = nickname || '';
       socket.data.version = version || '';
-      registry.set(owner, { socket, instanceId, nickname: nickname || '', version: version || '' });
+      socket.data.status = status ?? null;
+      registry.set(owner, { socket, instanceId, nickname: nickname || '', version: version || '', status: status ?? null });
 
       socket.emit('peers', roster(owner));
       socket.broadcast.emit('peer:up', {
-        owner, instanceId, nickname: nickname || '', version: version || '',
+        owner, instanceId, nickname: nickname || '', version: version || '', status: status ?? null,
       });
       log(`register ${owner} (${instanceId.slice(0, 8)})${nickname ? ` "${nickname}"` : ''}${version ? ` · ${version}` : ''} — ${registry.size} online`);
     });
 
-    // V7.1 — display nickname change. Not a re-register (that trips same-owner
-    // dedup); a presentation-only update we store and relay to everyone else.
-    socket.on('profile:update', ({ nickname } = {}) => {
+    // V7.1/V7.7 — display nickname + status change. Not a re-register (that
+    // trips same-owner dedup); a presentation-only update we store and relay to
+    // everyone else. status travels verbatim (the relay never inspects it).
+    socket.on('profile:update', ({ nickname, status } = {}) => {
       const owner = socket.data.owner;
       if (!owner) return;
       const entry = registry.get(owner);
       if (!entry || entry.socket !== socket) return;
       entry.nickname = nickname || '';
+      entry.status = status ?? null;
       socket.data.nickname = entry.nickname;
-      socket.broadcast.emit('profile:update', { owner, instanceId: entry.instanceId, nickname: entry.nickname });
-      log(`profile ${owner} → "${entry.nickname}"`);
+      socket.data.status = entry.status;
+      socket.broadcast.emit('profile:update', {
+        owner, instanceId: entry.instanceId, nickname: entry.nickname, version: entry.version || '', status: entry.status,
+      });
+      log(`profile ${owner} → "${entry.nickname}"${entry.status ? ` · ${entry.status.label}` : ''}`);
     });
 
     socket.on('deliver', ({ to, kind, payload } = {}, ack) => {

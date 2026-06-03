@@ -4,8 +4,26 @@ import { isIP } from 'net';
 import {
   INSTANCE_ID, MDNS_RESOLVE_ADDRESSES, OWNER, PORT, SERVICE_NAME, SERVICE_TYPE, VERSION,
 } from './config.js';
-import { getNickname } from './store.js';
+import { getNickname, getStatus } from './store.js';
+import { normalizeIncomingStatus } from './sanitize.js';
 import { peerLog, errLog } from './logger.js';
+
+// V7.7 — the live status rides in a single TXT key as compact JSON ("null" when
+// none), so it costs one record field like nickname/version. Parse defensively:
+// a missing/garbled value just means "no status".
+function readTxtStatus(txt) {
+  if (typeof txt?.status !== 'string' || !txt.status) return null;
+  try {
+    return normalizeIncomingStatus(JSON.parse(txt.status));
+  } catch {
+    return null;
+  }
+}
+
+// Equality on the propagated status, used to decide whether to re-emit peer:up.
+function sameStatus(a, b) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
 
 const HEALTH_CHECK_INTERVAL_MS = 10_000;
 const HEALTH_CHECK_TIMEOUT_MS = 5_000;
@@ -42,6 +60,7 @@ export async function resolveHost(host) {
 export function listPeers() {
   return [...peerMap.values()].map((p) => ({
     instanceId: p.instanceId, owner: p.owner, nickname: p.nickname, version: p.version,
+    status: p.status ?? null,
   }));
 }
 
@@ -87,6 +106,7 @@ export function init({ io }) {
       owner: txt.owner ?? '?',
       nickname: txt.nickname || '',
       version: txt.version || '',
+      status: readTxtStatus(txt),
       host,
       address,
       addresses: Array.isArray(service.addresses) ? service.addresses : [],
@@ -115,7 +135,8 @@ export function init({ io }) {
         owner: peer.owner, host, address, addresses: peer.addresses, port: peer.port, version: peer.version,
       });
       io.emit('peer:up', {
-        instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname, version: peer.version,
+        instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname,
+        version: peer.version, status: peer.status,
       });
     } else {
       if (existing.address !== address) {
@@ -123,16 +144,18 @@ export function init({ io }) {
           owner: peer.owner, host, oldAddress: existing.address, address, addresses: peer.addresses,
         });
       }
-      // The peer re-advertised with a new nickname (V7.1 hot update over mDNS)
-      // or a new version (V7.4 on Pi restart with a new build). Re-emit peer:up
-      // so front-ends upsert the change — peer:up is an idempotent upsert keyed
-      // by instanceId.
-      if (existing.nickname !== peer.nickname || existing.version !== peer.version) {
-        peerLog('peer:profile', `${peer.owner} → surnom « ${peer.nickname || '—'} » · ${peer.version || '?'}`, {
-          owner: peer.owner, nickname: peer.nickname, version: peer.version,
+      // The peer re-advertised with a new nickname (V7.1 hot update over mDNS),
+      // a new version (V7.4 on Pi restart with a new build), or a new status
+      // (V7.7 hot update over mDNS). Re-emit peer:up so front-ends upsert the
+      // change — peer:up is an idempotent upsert keyed by instanceId.
+      if (existing.nickname !== peer.nickname || existing.version !== peer.version
+          || !sameStatus(existing.status, peer.status)) {
+        peerLog('peer:profile', `${peer.owner} → surnom « ${peer.nickname || '—'} » · ${peer.version || '?'} · statut ${peer.status?.label || '—'}`, {
+          owner: peer.owner, nickname: peer.nickname, version: peer.version, status: peer.status,
         });
         io.emit('peer:up', {
-          instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname, version: peer.version,
+          instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname,
+          version: peer.version, status: peer.status,
         });
       }
     }
@@ -154,11 +177,15 @@ export function init({ io }) {
       PORT,
       {
         name: SERVICE_NAME,
-        // nickname read fresh at advertise time so a re-advertise (rebirth or
-        // V7.1 refresh()) picks up the current value. version is frozen at boot
-        // (V7.4) — it can't change without a process restart, which mints a new
-        // INSTANCE_ID anyway and triggers a same-owner dedup on peers.
-        txtRecord: { owner: OWNER, instanceId: INSTANCE_ID, nickname: getNickname() || '', version: VERSION },
+        // nickname + status read fresh at advertise time so a re-advertise
+        // (rebirth, V7.1 nickname refresh, or V7.7 status announce) picks up the
+        // current values. version is frozen at boot (V7.4) — it can't change
+        // without a process restart, which mints a new INSTANCE_ID anyway and
+        // triggers a same-owner dedup on peers. status is one compact JSON key.
+        txtRecord: {
+          owner: OWNER, instanceId: INSTANCE_ID, nickname: getNickname() || '', version: VERSION,
+          status: JSON.stringify(getStatus() || null),
+        },
       },
     );
     advertisement.on('error', (err) => errLog('mdns:advertise-error', err.message));
@@ -211,13 +238,21 @@ export function init({ io }) {
         // too, but health-check is the more direct signal (no advertisement
         // round-trip needed). Useful when the peer was discovered before V7.4
         // shipped, then upgraded mid-run.
-        if (typeof data.version === 'string' && data.version && data.version !== peer.version) {
-          peer.version = data.version;
-          peerLog('peer:version', `${peer.owner} → version ${peer.version}`, {
-            owner: peer.owner, version: peer.version,
+        // V7.7 — backfill status from /me too. The TXT record carries it, but
+        // /me is the more direct signal (no advertise round-trip) and catches a
+        // status that expired on the peer between mDNS refreshes.
+        const freshStatus = normalizeIncomingStatus(data.status);
+        const versionChanged = typeof data.version === 'string' && data.version && data.version !== peer.version;
+        const statusChanged = !sameStatus(peer.status, freshStatus);
+        if (versionChanged || statusChanged) {
+          if (versionChanged) peer.version = data.version;
+          if (statusChanged) peer.status = freshStatus;
+          peerLog('peer:profile', `${peer.owner} → version ${peer.version || '?'} · statut ${peer.status?.label || '—'}`, {
+            owner: peer.owner, version: peer.version, status: peer.status,
           });
           io.emit('peer:up', {
-            instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname, version: peer.version,
+            instanceId: peer.instanceId, owner: peer.owner, nickname: peer.nickname,
+            version: peer.version, status: peer.status,
           });
         }
       } catch (err) {

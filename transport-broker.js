@@ -1,6 +1,7 @@
 import { io as ioClient } from 'socket.io-client';
 import { INSTANCE_ID, OWNER, BROKER_URL_DEFAULT, BROKER_TOKEN, VERSION } from './config.js';
-import { getNickname, getBrokerUrl } from './store.js';
+import { getNickname, getStatus, getBrokerUrl } from './store.js';
+import { normalizeIncomingStatus } from './sanitize.js';
 import { peerLog, errLog } from './logger.js';
 
 // Broker transport: a Socket.IO *client* to the LAN broker. Implements the same
@@ -13,7 +14,7 @@ import { peerLog, errLog } from './logger.js';
 export function createBrokerTransport({ io, onStatus = () => {} }) {
   let socket = null;
   let deliverHandler = () => {};
-  let peers = []; // [{ owner, instanceId, nickname, version }]
+  let peers = []; // [{ owner, instanceId, nickname, version, status }]
   let connected = false;
   let currentUrl = null; // the URL we're connected to / last asked to use
 
@@ -46,6 +47,7 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
           instanceId: INSTANCE_ID,
           nickname: getNickname() || undefined,
           version: VERSION,
+          status: getStatus() || undefined,
           token: BROKER_TOKEN ?? undefined,
         });
         setConnected(true);
@@ -58,6 +60,7 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
         peers = Array.isArray(list)
           ? list.map((p) => ({
               owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+              status: normalizeIncomingStatus(p.status),
             }))
           : [];
         for (const p of peers) io.emit('peer:up', p);
@@ -65,31 +68,33 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
 
       socket.on('peer:up', (p) => {
         if (!p?.instanceId) return;
+        const status = normalizeIncomingStatus(p.status);
         const entry = peers.find((x) => x.instanceId === p.instanceId);
-        if (entry) { entry.nickname = p.nickname || ''; entry.version = p.version || ''; }
+        if (entry) { entry.nickname = p.nickname || ''; entry.version = p.version || ''; entry.status = status; }
         else peers.push({
-          owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+          owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '', status,
         });
         io.emit('peer:up', {
-          owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+          owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '', status,
         });
-        peerLog('peer:up', `${p.owner} en ligne (broker) · ${p.version || '?'}`, {
-          owner: p.owner, version: p.version,
+        peerLog('peer:up', `${p.owner} en ligne (broker) · ${p.version || '?'} · statut ${status?.label || '—'}`, {
+          owner: p.owner, version: p.version, status,
         });
       });
 
-      // V7.1 — a peer changed its nickname (no up/down). Update our view and
-      // re-emit peer:up so front-ends upsert the new name. Version is frozen
-      // for the life of a process, so it doesn't change here — we just relay
-      // whatever the registry has for completeness.
-      socket.on('profile:update', ({ owner, instanceId, nickname, version } = {}) => {
+      // V7.1/V7.7 — a peer changed its nickname or status (no up/down). Update
+      // our view and re-emit peer:up so front-ends upsert the change. Version is
+      // frozen for the life of a process, so it doesn't change here — we just
+      // relay whatever the registry has for completeness.
+      socket.on('profile:update', ({ owner, instanceId, nickname, version, status } = {}) => {
         if (!instanceId) return;
+        const norm = normalizeIncomingStatus(status);
         const entry = peers.find((x) => x.instanceId === instanceId);
-        if (entry) entry.nickname = nickname || '';
+        if (entry) { entry.nickname = nickname || ''; entry.status = norm; }
         io.emit('peer:up', {
-          owner, instanceId, nickname: nickname || '', version: version || entry?.version || '',
+          owner, instanceId, nickname: nickname || '', version: version || entry?.version || '', status: norm,
         });
-        peerLog('peer:profile', `${owner} → surnom « ${nickname || '—'} » (broker)`, { owner, nickname });
+        peerLog('peer:profile', `${owner} → surnom « ${nickname || '—'} » · statut ${norm?.label || '—'} (broker)`, { owner, nickname, status: norm });
       });
 
       socket.on('peer:down', (p) => {
@@ -140,18 +145,20 @@ export function createBrokerTransport({ io, onStatus = () => {} }) {
     listPeers() {
       return peers.map((p) => ({
         owner: p.owner, instanceId: p.instanceId, nickname: p.nickname || '', version: p.version || '',
+        status: p.status ?? null,
       }));
     },
 
-    // V7.1 — broadcast our new nickname over the broker. Not a re-register
-    // (that would trip same-owner dedup on ourselves); a dedicated event the
-    // broker relays to everyone else. No-op when the socket is down.
+    // V7.1/V7.7 — broadcast our nickname + status over the broker. Not a
+    // re-register (that would trip same-owner dedup on ourselves); a dedicated
+    // event the broker relays to everyone else. No-op when the socket is down.
     announceProfile() {
       if (!socket || !socket.connected) return;
       socket.emit('profile:update', {
         owner: OWNER,
         instanceId: INSTANCE_ID,
         nickname: getNickname() || '',
+        status: getStatus() || null,
       });
     },
 

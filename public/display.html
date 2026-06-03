@@ -191,6 +191,38 @@
     .gp-peers-label { font-size: 13px; color: var(--crema-muted); margin: 12px 0 4px; }
     .gp-peers div { font-size: 14px; margin: 3px 0; }
 
+    /* My status — quick preset chips (V7.7), tap to apply from the screen */
+    .gp-status {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--crema-stroke);
+    }
+    .gp-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+    .gp-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 11px 16px;
+      font-size: 16px;
+      font-family: inherit;
+      color: var(--crema-text);
+      background: var(--crema-surface, rgba(255,255,255,0.04));
+      border: 1px solid var(--crema-stroke);
+      border-radius: 999px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .gp-chip .gp-chip-dot {
+      width: 11px; height: 11px; border-radius: 50%;
+      background: var(--crema-presence);
+    }
+    .gp-chip[aria-pressed="true"] {
+      border-color: var(--crema-accent);
+      background: rgba(232, 137, 110, 0.16);
+    }
+    body.screen-sm .gp-chip { font-size: 21px; padding: 15px 22px; }
+
     .presence {
       display: flex;
       align-items: center;
@@ -1132,6 +1164,11 @@
         </button>
       </div>
 
+      <div class="gp-status">
+        <div class="gp-section-title">Mon statut</div>
+        <div class="gp-chips" id="gp-status-chips"></div>
+      </div>
+
       <div class="gp-about">
         <div class="gp-section-title">À propos</div>
         <div class="gp-self" id="gp-about-self">—</div>
@@ -1545,13 +1582,24 @@
         if (seenOwners.has(p.owner)) continue;
         seenOwners.add(p.owner);
         // Typing is keyed by owner (the wire identity); the name shown is the
-        // nickname when set.
-        const statusHtml = typingOwners.has(p.owner)
-          ? `écrit<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>`
-          : 'en ligne';
+        // nickname when set. Otherwise show the rich status (V7.7) when set —
+        // label + optional note, with the dot tinted to the status colour — and
+        // fall back to plain "en ligne".
+        const st = p.status && Date.now() < (p.status.until ?? Infinity) ? p.status : null;
+        let statusHtml;
+        let dotStyle = '';
+        if (typingOwners.has(p.owner)) {
+          statusHtml = `écrit<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>`;
+        } else if (st) {
+          const tail = st.note ? ` · ${escapeHtml(st.note)}` : '';
+          statusHtml = `${st.icon ? escapeHtml(st.icon) + ' ' : ''}${escapeHtml(st.label)}${tail}`;
+          if (st.color) dotStyle = ` style="background:${escapeHtml(st.color)};box-shadow:0 0 8px ${escapeHtml(st.color)}"`;
+        } else {
+          statusHtml = 'en ligne';
+        }
         rows.push(`
           <div class="presence">
-            <span class="dot"></span>
+            <span class="dot"${dotStyle}></span>
             <span><span class="name crema-label">${escapeHtml(p.nickname || p.owner)}</span> ${statusHtml}</span>
           </div>
         `);
@@ -1980,15 +2028,15 @@
 
     socket.on('peers:init', (list) => {
       peers.clear();
-      for (const p of list) peers.set(p.instanceId, { owner: p.owner, nickname: p.nickname || '' });
+      for (const p of list) peers.set(p.instanceId, { owner: p.owner, nickname: p.nickname || '', status: p.status || null });
       renderPresence();
       renderShortcuts();
       renderDestBar();
       renderServerStatus();
     });
-    socket.on('peer:up', ({ instanceId, owner, nickname }) => {
-      // Upsert — also how a nickname change lands (same instanceId, new name).
-      peers.set(instanceId, { owner, nickname: nickname || '' });
+    socket.on('peer:up', ({ instanceId, owner, nickname, status }) => {
+      // Upsert — also how a nickname/status change lands (same instanceId).
+      peers.set(instanceId, { owner, nickname: nickname || '', status: status || null });
       renderPresence();
       renderShortcuts();
       renderDestBar();
@@ -2111,10 +2159,68 @@
       });
     }
 
+    // ===== My status — quick preset chips (V7.7) =====
+    // The screen sets its own status with one tap (label/colour from this Pi's
+    // catalog). The richer note + "until" stay in the PWA; a quick chip clears
+    // them. Mirrors /settings: optimistic apply, status:updated resync.
+    const gpStatusChips = document.getElementById('gp-status-chips');
+    let statusPresets = [];        // this Pi's catalog
+    let selfStatusPresetId = '';   // active preset id ('' = Disponible)
+
+    function renderStatusChips() {
+      const chips = [{ id: '', label: 'Disponible', icon: '', color: '' }, ...statusPresets];
+      gpStatusChips.innerHTML = chips.map((c) => {
+        const active = (c.id || '') === selfStatusPresetId;
+        const dot = c.color ? ` style="background:${escapeHtml(c.color)}"` : '';
+        return `<button type="button" class="gp-chip" data-id="${escapeHtml(c.id || '')}" aria-pressed="${active}">`
+          + `<span class="gp-chip-dot"${dot}></span>${c.icon ? escapeHtml(c.icon) + ' ' : ''}${escapeHtml(c.label)}</button>`;
+      }).join('');
+    }
+
+    async function loadStatusCatalog() {
+      try { const l = await (await fetch('/status-presets')).json(); statusPresets = Array.isArray(l) ? l : []; }
+      catch { statusPresets = []; }
+    }
+    async function loadSelfStatus() {
+      try { const { selection } = await (await fetch('/status')).json(); selfStatusPresetId = selection?.presetId || ''; }
+      catch { selfStatusPresetId = ''; }
+    }
+
+    gpStatusChips.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.gp-chip');
+      if (!btn) return;
+      const presetId = btn.dataset.id || '';
+      selfStatusPresetId = presetId;        // optimistic
+      renderStatusChips();
+      try {
+        await fetch('/status', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ presetId }),
+        });
+      } catch {}
+    });
+
+    // Status set elsewhere (PWA, another tab) or auto-reverted at its deadline.
+    socket.on('status:updated', ({ status }) => {
+      selfStatusPresetId = status?.presetId || '';
+      renderStatusChips();
+    });
+    // Catalog edited from the PWA — refresh the chips.
+    socket.on('status-presets:updated', (list) => {
+      statusPresets = Array.isArray(list) ? list : [];
+      renderStatusChips();
+    });
+
+    // Prime once so the panel is ready on first open.
+    Promise.all([loadStatusCatalog(), loadSelfStatus()]).then(renderStatusChips);
+
     function openGear() {
       gearPanel.hidden = false;
       gearAbout();        // refresh roster/versions each open
       gearTheme.load();   // reflect the persisted light/dark choice
+      // Re-sync status chips on open (catalog or active status may have changed).
+      Promise.all([loadStatusCatalog(), loadSelfStatus()]).then(renderStatusChips);
     }
     // Declared (not arrow) so showMessage() can call it before this block runs.
     function closeGear() {

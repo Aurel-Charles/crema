@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import {
   MAX_REPLIES, MAX_SHORTCUTS, MAX_LABEL_LENGTH, MAX_SHORTCUT_TEXT, MAX_ICON_LENGTH,
   MIN_TTL_MS, MAX_TTL_MS,
+  MAX_STATUS_PRESETS, MAX_STATUS_NOTE, STATUS_COLOR_DEFAULT,
 } from './config.js';
 
 // Pure input-sanitisation helpers, extracted from store.js and messaging.js so
@@ -100,6 +101,98 @@ export function sanitizeTarget(input) {
 // attribute to two known values.
 export function sanitizeTheme(input) {
   return input === 'dark' ? 'dark' : 'light';
+}
+
+// ===== Rich presence (V7.7) =====
+
+// A status-dot colour: a #rrggbb hex, else the amber default. Kept to a closed
+// shape so it's safe to drop straight into a CSS variable / inline style.
+export function sanitizeColor(input, fallback = STATUS_COLOR_DEFAULT) {
+  const s = typeof input === 'string' ? input.trim() : '';
+  return /^#[0-9a-f]{6}$/i.test(s) ? s : fallback;
+}
+
+// Status presets catalog: array of { id, label, icon, color }. Throws on a
+// non-array (the PUT route maps that to a 400), like sanitizeShortcuts. Mints
+// an id when absent, dedups by id, drops items failing a field constraint,
+// caps at MAX_STATUS_PRESETS.
+export function sanitizeStatusPresets(input) {
+  if (!Array.isArray(input)) throw new Error('Liste invalide');
+  const cleaned = [];
+  const seen = new Set();
+  for (const item of input) {
+    const label = typeof item?.label === 'string' ? item.label.trim() : '';
+    const icon = typeof item?.icon === 'string' ? item.icon.trim() : '';
+    if (!label || label.length > MAX_LABEL_LENGTH) continue;
+    if (icon.length > MAX_ICON_LENGTH) continue;
+    const color = sanitizeColor(item?.color);
+    const id = (typeof item?.id === 'string' && item.id) ? item.id : randomUUID();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push({ id, label, icon, color });
+    if (cleaned.length >= MAX_STATUS_PRESETS) break;
+  }
+  return cleaned;
+}
+
+// A free note attached to a status: trimmed, truncated (not rejected) at
+// MAX_STATUS_NOTE. Empty-after-trim = no note.
+export function sanitizeStatusNote(input) {
+  const s = typeof input === 'string' ? input.trim() : '';
+  return s.length > MAX_STATUS_NOTE ? s.slice(0, MAX_STATUS_NOTE) : s;
+}
+
+// The "until" auto-revert epoch-ms. Must be in the future; clamped to the TTL
+// ceiling so a status can't be pinned for longer than a message lives. null =
+// no auto-revert (manual until changed).
+export function sanitizeUntil(input, now = Date.now()) {
+  const n = Number(input);
+  if (!Number.isFinite(n)) return null;
+  if (n <= now) return null;
+  if (n > now + MAX_TTL_MS) return now + MAX_TTL_MS;
+  return Math.floor(n);
+}
+
+// Resolve a live status from the catalog + the user's selection. The resolved
+// object is what propagates to peers (label/icon/colour come from this Pi's
+// catalog; note/until from the picker). Returns null = "no status set" (plain
+// "en ligne"): an empty/unknown presetId, or a preset that no longer exists.
+export function resolveStatus(presets, { presetId, note, until } = {}, now = Date.now()) {
+  if (!presetId) return null;
+  const preset = (Array.isArray(presets) ? presets : []).find((p) => p.id === presetId);
+  if (!preset) return null;
+  const status = {
+    presetId,
+    label: preset.label,
+    icon: preset.icon || '',
+    color: sanitizeColor(preset.color),
+  };
+  const n = sanitizeStatusNote(note);
+  if (n) status.note = n;
+  const u = sanitizeUntil(until, now);
+  if (u) status.until = u;
+  return status;
+}
+
+// Normalise a status received off the wire (mDNS TXT / broker) before showing
+// it. Defensive: drops anything malformed, and treats an already-expired
+// `until` as no status (the owner's auto-revert announce may not have arrived
+// yet). Returns null or a clean { label, icon, color, note?, until? }.
+export function normalizeIncomingStatus(input, now = Date.now()) {
+  if (!input || typeof input !== 'object') return null;
+  const label = typeof input.label === 'string' ? input.label.trim().slice(0, MAX_LABEL_LENGTH) : '';
+  if (!label) return null;
+  if (Number.isFinite(Number(input.until)) && Number(input.until) <= now) return null;
+  const out = {
+    label,
+    icon: typeof input.icon === 'string' ? input.icon.trim().slice(0, MAX_ICON_LENGTH) : '',
+    color: sanitizeColor(input.color),
+  };
+  const note = sanitizeStatusNote(input.note);
+  if (note) out.note = note;
+  const u = sanitizeUntil(input.until, now);
+  if (u) out.until = u;
+  return out;
 }
 
 // Broker URL set from the settings page (V7.3). Tri-state so the PUT route can

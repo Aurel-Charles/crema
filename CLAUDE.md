@@ -4,14 +4,14 @@ Système de messagerie local entre Raspberry Pi (cinq aujourd'hui : `pi-aurel`, 
 
 Le nom *Crema* évoque la couche dorée d'un espresso de spécialité — clin d'œil au rituel café partagé qui a inspiré le projet. La palette visuelle des écrans reprend littéralement cette teinte amber.
 
-## Étape actuelle : V7.6 (panneau gear sur l'écran : toggle clair/sombre + À propos)
+## Étape actuelle : V7.7 (présence riche : statut propagé aux pairs)
 
 La roadmap V0→V6 est livrée, plus le **transport dual** (V7.0), le **surnom
 d'affichage** (V7.1), le **profil petit écran + watchdog Wi-Fi USB** (V7.2),
 l'**URL du broker éditable depuis `/settings`** (V7.3), la **version
 runtime exposée et propagée** (V7.4), le **badge « version différente »**
-(V7.5) et le **panneau gear sur l'écran** (toggle clair/sombre + section
-« À propos », V7.6).
+(V7.5), le **panneau gear sur l'écran** (toggle clair/sombre + section
+« À propos », V7.6) et la **présence riche** (statut propagé aux pairs, V7.7).
 Tourne sur **cinq Pi** : `pi-aurel`, `pi-slibar`, `pi-desk` (écran tactile
 3.5"), `pi-test` et `flo`. `pi-test` sert à la fois de poste fixe et de banc
 d'essai Ansible. **Tous épinglés sur un broker cloud
@@ -69,6 +69,32 @@ duplication** : la logique « À propos » (+ badge V7.5) vit désormais dans un
 module partagé `public/about.js` (`window.cremaAbout`), consommé par `/settings`
 **et** l'écran ; les composants CSS `.toggle` et `.ver-badge` ont migré dans
 `theme.css`.
+
+**Présence riche (V7.7)** : chaque Pi expose un **statut** (« Sorti »,
+« Occupé », « En réunion »…) vu par les autres Pi — point coloré + libellé sur
+leur écran idle, à la place du simple « en ligne ». **Deux objets distincts**
+(comme le reste du data model) : un **catalogue de presets** par Pi
+(`{id, label, icon, color}`, dans `data/status-presets.json`), **configurable
+depuis la PWA** exactement comme les raccourcis/réponses ; et le **statut live**
+(`{presetId, note?, until?}` dans `data/status.json`), **résolu** serveur-side
+contre le catalogue en un objet `{label, icon, color, note?, until?}`. C'est ce
+**résolu** qui se propage aux pairs — pas l'`id`, puisque chaque Pi a son propre
+catalogue. **Même couche de propagation que `nickname` V7.1 / `version` V7.4** :
+TXT mDNS (une clé JSON compacte), payload broker `register` + `roster` +
+`peer:up` + `profile:update`, `/me`, backfill via health-check ; agrégé dans
+`transport-dual.js` (les 4 endroits-miroir). **Orthogonal au DND** : le DND
+coupe *mes* alertes entrantes, le statut change seulement comment les pairs *me
+voient* — les deux ne se touchent jamais. Réglage **depuis la PWA** (`/settings`,
+section « Présence » : picker statut courant + note + durée « jusqu'à », +
+éditeur du catalogue) **et depuis l'écran** (panneau gear V7.6, rangée « Mon
+statut » de chips presets, un tap = statut posé depuis son propre écran).
+**Auto-revert** : un statut avec `until` revient seul à « disponible » à
+l'échéance (timer style TTL dans `store.js`, persisté + ré-annoncé). Pure couche
+présentation : **aucune migration, aucune dépendance**. Côté broker
+(`broker/server.js`), le statut est stocké/relayé verbatim et **rétro-compatible**
+(un vieux broker ignore le champ en trop — les Pi maison se voient quand même via
+le secours p2p mDNS du mode dual). Voir `test/status.test.js` (helpers purs) et
+les assertions V7.7 de `broker/test-protocol.mjs`.
 
 **Architecture en place** :
 - **Découverte** : `peers.js` — chaque Pi s'annonce et browse le service mDNS
@@ -189,7 +215,7 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 
 - **Backend** : Node.js 20 + Express + Socket.IO
 - **Frontend** : HTML/CSS/JS vanilla (pas de framework au V0 ; possibilité de migrer vers React/Vue plus tard si pertinent)
-- **Persistence** : SQLite (`db.js`) pour l'historique ; JSON (`store.js`) pour réponses/raccourcis/DND/surnom (`data/identity.json`)
+- **Persistence** : SQLite (`db.js`) pour l'historique ; JSON (`store.js`) pour réponses/raccourcis/DND/surnom (`data/identity.json`)/statut (catalogue `data/status-presets.json` + live `data/status.json`, V7.7)
 - **Découverte réseau** : en mode `p2p`, mDNS via le paquet `mdns` (PAS `bonjour-service` — abandonné, voir mémoire `mdns-on-raspberry-pi` pour les patches libavahi/resolverSequence obligatoires sur Pi). En mode `broker`, pas de mDNS : annuaire centralisé côté relais.
 - **Transport broker** : `socket.io` (relais) + `socket.io-client` (Pi)
 
@@ -209,13 +235,16 @@ Pour détecter un reboot Pi pendant un run : `journalctl --list-boots` + `last -
 - ✅ **V7.4** — Version runtime exposée dans `/me` et propagée aux pairs (TXT mDNS + broker `register`/`roster`/`peer:up`), affichée dans `/settings` (section « À propos », mon Pi + pairs). Docker reçoit la version via `--build-arg GIT_DESCRIBE` au build CI.
 - ✅ **V7.5** — Badge UI dans la section « À propos » de `/settings` quand un pair tourne sur une version différente de ce Pi. Pure présentation au-dessus des données V7.4 : comparaison **binaire** (badge affiché seulement si les deux versions sont connues et distinctes, un pair en version inconnue `?` ne déclenche rien), couleur reprise de la bande de section. Pas de nouvelle donnée, pas de dépendance, pas de migration.
 - ✅ **V7.6** — Panneau gear sur l'écran : un bouton engrenage discret (topbar idle, à côté du DND) ouvre un overlay portant un **toggle clair/sombre** (miroir de `/settings` : `GET/PUT /theme`, optimiste via `appearance.js`, resync `theme:updated`, reskin bidirectionnel écran↔téléphone) et la section **« À propos »** (ce Pi + pairs + badge `≠ version` V7.5). Ferme sur ✕/tap-outside/arrivée de message ; overrides `screen-sm`. Logique « À propos » extraite dans un module partagé `public/about.js`, CSS `.toggle`/`.ver-badge` migrés dans `theme.css`. Pas de backend, pas de dépendance, pas de migration.
+- ✅ **V7.7** — Présence riche : chaque Pi expose un **statut** (Sorti / Occupé / En réunion…) vu par les pairs (point coloré + libellé sur l'écran idle). Deux objets : un **catalogue de presets** configurable depuis la PWA (`data/status-presets.json`, patron raccourcis) et le **statut live** (`data/status.json`) résolu serveur-side puis propagé en objet `{label, icon, color, note?, until?}` — **même couche que `nickname` V7.1 / `version` V7.4** (TXT mDNS JSON, broker `register`/`roster`/`peer:up`/`profile:update`, `/me`, agrégateur dual). **Orthogonal au DND**. Réglage depuis la PWA (section « Présence » : statut courant + note + durée « jusqu'à » + éditeur du catalogue) **et** depuis l'écran (panneau gear, chips « Mon statut »). **Auto-revert** à l'échéance `until`. Broker rétro-compatible (statut relayé verbatim). Pas de migration, pas de dépendance. Tests : `test/status.test.js` + assertions V7.7 de `broker/test-protocol.mjs`.
 
 Roadmap initiale livrée, puis étendue (transport dual, surnom, profil petit
 écran + watchdog Wi-Fi, URL broker éditable, version exposée, badge version
-différente, panneau gear). Pistes encore ouvertes : accès hors domicile,
-multi-Pi par personne (labels de pièce), comparaison sémantique « plus ancien /
-plus récent » au lieu du simple ≠ (**V7.7 candidate**, demanderait un parsing
-semver robuste face aux versions `git describe` non taggées/dirty). Chaque
+différente, panneau gear, présence riche). Pistes encore ouvertes : accès hors
+domicile, multi-Pi par personne (labels de pièce), comparaison sémantique « plus
+ancien / plus récent » au lieu du simple ≠ (**V7.8 candidate**, demanderait un
+parsing semver robuste face aux versions `git describe` non taggées/dirty), et
+des idées du brainstorm post-V7.6 (sondage café, vocal/interphone, messages
+programmés, broadcast maison — cf. mémoire `crema-feature-backlog`). Chaque
 version est restée indépendamment utile.
 
 ## Architecture cible (V1+)

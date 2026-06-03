@@ -104,6 +104,8 @@ export const TRANSPORT_FILE = join(DATA_DIR, 'transport.json');
 // Shipped under the v7.3.0 tag without its own roadmap entry; V7.4 is the
 // running-version exposure feature above.
 export const THEME_FILE = join(DATA_DIR, 'theme.json');
+export const STATUS_PRESETS_FILE = join(DATA_DIR, 'status-presets.json');
+export const STATUS_FILE = join(DATA_DIR, 'status.json');
 export const HISTORY_DB_FILE = join(DATA_DIR, 'history.db');
 export const PUBLIC_DIR = join(__dirname, 'public');
 
@@ -114,6 +116,20 @@ export const MAX_SHORTCUT_TEXT = 200;
 export const MAX_ICON_LENGTH = 8;
 
 export const DEFAULT_REPLIES = [{ label: '👍' }, { label: 'Vu' }, { label: 'Plus tard' }];
+
+// Rich presence (V7.7) — a per-Pi catalog of status presets, configurable from
+// the PWA like replies/shortcuts. The live status (which preset is active, plus
+// an optional free note and "until" auto-revert time) is a separate object that
+// propagates to peers on top of `owner`, exactly like the V7.1 nickname. An
+// empty/absent live status = the plain "en ligne" default (no status set).
+export const MAX_STATUS_PRESETS = 8;
+export const MAX_STATUS_NOTE = 40;
+export const STATUS_COLOR_DEFAULT = '#F4A65A'; // amber glow — matches the idle accent
+export const DEFAULT_STATUS_PRESETS = [
+  { id: 'sorti', label: 'Sorti', icon: '🚪', color: '#9C7E54' },
+  { id: 'occupe', label: 'Occupé', icon: '⛔', color: '#E06C5A' },
+  { id: 'reunion', label: 'En réunion', icon: '📵', color: '#F4A65A' },
+];
 
 // V4 TTL bounds — keep generous on both ends.
 export const MIN_TTL_MS = 5_000;

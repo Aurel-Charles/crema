@@ -122,6 +122,34 @@
     }
     .del:active { background: var(--crema-danger-bg); color: var(--crema-danger); border-color: var(--crema-danger); }
 
+    /* Présence — statut courant (apply instantané) */
+    .status-current { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .status-current select, .status-current input {
+      font-size: 16px;
+      font-family: inherit;
+      padding: 12px 14px;
+      border: 1px solid var(--crema-stroke);
+      border-radius: 12px;
+      background: var(--crema-surface);
+      color: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .status-current select:focus, .status-current input:focus {
+      border-color: var(--crema-accent);
+      box-shadow: 0 0 0 3px rgba(232, 137, 110, 0.2);
+    }
+    .status-current #status-preset { min-width: 150px; }
+    .status-current #status-note { flex: 1; min-width: 140px; }
+    .status-current .add { margin-top: 0; }
+    /* Colour swatch on a status preset card */
+    .card-head .color-input {
+      width: 48px;
+      padding: 4px;
+      cursor: pointer;
+      border-radius: 12px;
+    }
+
     /* Cards (shortcuts) */
     .cards { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
     .card {
@@ -323,6 +351,27 @@
       </section>
 
       <section>
+        <h2>Présence</h2>
+        <p class="hint">Ton statut, vu par les autres Pi (point coloré + libellé sur leur écran). Indépendant du « Ne pas déranger ».</p>
+        <div class="status-current">
+          <select id="status-preset" aria-label="Statut courant"></select>
+          <input type="text" id="status-note" maxlength="40" placeholder="Note (ex: au studio)" autocomplete="off" />
+          <select id="status-until" aria-label="Durée du statut">
+            <option value="0">Jusqu'à ce que je change</option>
+            <option value="1800000">Pendant 30 min</option>
+            <option value="3600000">Pendant 1 h</option>
+            <option value="7200000">Pendant 2 h</option>
+            <option value="14400000">Pendant 4 h</option>
+          </select>
+          <button type="button" class="add" id="status-apply">Appliquer</button>
+        </div>
+        <div class="status" id="status-feedback"></div>
+        <p class="hint" style="margin-top: 14px;">Statuts disponibles — modifiables, enregistrés avec le bouton du bas.</p>
+        <div class="cards" id="status-presets-cards"></div>
+        <button type="button" class="add" id="status-preset-add">+ Ajouter un statut</button>
+      </section>
+
+      <section>
         <h2>Surnom</h2>
         <p class="hint">Le nom affiché sur les écrans, à la place de <span id="owner-name">…</span>. Laisse vide pour revenir au défaut.</p>
         <div class="rows">
@@ -502,6 +551,9 @@
     function updateAddStates() {
       replyAddBtn.disabled = repliesRowsEl.children.length >= MAX_REPLIES;
       shortcutAddBtn.disabled = shortcutsCardsEl.children.length >= MAX_SHORTCUTS;
+      if (statusPresetAddBtn) {
+        statusPresetAddBtn.disabled = statusPresetsCardsEl.children.length >= MAX_STATUS_PRESETS;
+      }
     }
 
     // ===== DND toggle =====
@@ -562,6 +614,123 @@
     socket.on('profile:updated', ({ nickname }) => {
       if (document.activeElement !== nicknameInput) nicknameInput.value = nickname || '';
     });
+
+    // ===== Présence (statut riche, V7.7) =====
+    // Two pieces: the *current status* (instant apply, like DND) and the
+    // *presets catalog* (editable cards saved with the main form, like
+    // shortcuts). The catalog populates the current-status select.
+    const MAX_STATUS_PRESETS = 8;
+    const STATUS_COLOR_DEFAULT = '#9C7E54';
+    const statusPresetSel = document.getElementById('status-preset');
+    const statusNoteInput = document.getElementById('status-note');
+    const statusUntilSel = document.getElementById('status-until');
+    const statusApplyBtn = document.getElementById('status-apply');
+    const statusFeedback = document.getElementById('status-feedback');
+    const statusPresetsCardsEl = document.getElementById('status-presets-cards');
+    const statusPresetAddBtn = document.getElementById('status-preset-add');
+
+    function statusPresetCard(p = {}) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      if (p.id) card.dataset.id = p.id;
+      card.innerHTML = `
+        <div class="card-head">
+          <input class="icon-input" type="text" maxlength="4" placeholder="🚪" value="${esc(p.icon ?? '')}" />
+          <input class="label-input" type="text" maxlength="30" placeholder="Sorti" value="${esc(p.label ?? '')}" />
+          <input class="color-input" type="color" value="${esc(p.color || STATUS_COLOR_DEFAULT)}" aria-label="Couleur" />
+          <button type="button" class="del" aria-label="Supprimer">×</button>
+        </div>
+      `;
+      card.querySelector('.del').addEventListener('click', () => { card.remove(); updateAddStates(); });
+      return card;
+    }
+
+    // Keep the current-status <select> in step with the catalog without losing
+    // the active selection (the select is repopulated when the catalog changes).
+    function populateStatusSelect(list, current = statusPresetSel.value) {
+      const opts = ['<option value="">🟢 Disponible</option>'];
+      for (const p of list) {
+        opts.push(`<option value="${esc(p.id)}">${esc(p.icon ? p.icon + ' ' : '')}${esc(p.label)}</option>`);
+      }
+      statusPresetSel.innerHTML = opts.join('');
+      statusPresetSel.value = list.some((p) => p.id === current) ? current : '';
+    }
+
+    function renderStatusPresets(list) {
+      const active = statusPresetSel.value;
+      statusPresetsCardsEl.innerHTML = '';
+      for (const p of list) statusPresetsCardsEl.appendChild(statusPresetCard(p));
+      populateStatusSelect(list, active);
+      updateAddStates();
+    }
+
+    statusPresetAddBtn.addEventListener('click', () => {
+      if (statusPresetsCardsEl.children.length >= MAX_STATUS_PRESETS) return;
+      const card = statusPresetCard();
+      statusPresetsCardsEl.appendChild(card);
+      card.querySelector('.label-input').focus();
+      updateAddStates();
+    });
+
+    function reflectStatus(s) {
+      if (!s) { statusFeedback.textContent = 'Disponible'; statusFeedback.className = 'status'; return; }
+      let line = `Statut : ${s.icon ? s.icon + ' ' : ''}${s.label}`;
+      if (s.note) line += ` — ${s.note}`;
+      if (s.until) {
+        const t = new Date(s.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        line += ` · jusqu'à ${t}`;
+      }
+      statusFeedback.textContent = line;
+      statusFeedback.className = 'status ok';
+    }
+
+    async function loadStatus() {
+      try {
+        const { status: s, selection } = await (await fetch('/status')).json();
+        if (document.activeElement !== statusPresetSel) statusPresetSel.value = selection?.presetId || '';
+        if (document.activeElement !== statusNoteInput) statusNoteInput.value = selection?.note || '';
+        reflectStatus(s);
+      } catch {}
+    }
+
+    async function applyStatus() {
+      const presetId = statusPresetSel.value;
+      const note = statusNoteInput.value.trim();
+      const ms = Number(statusUntilSel.value);
+      const until = ms > 0 ? Date.now() + ms : null;
+      statusFeedback.textContent = 'Application…';
+      statusFeedback.className = 'status';
+      try {
+        const r = await fetch('/status', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ presetId, note, until }),
+        });
+        const { status: s } = await r.json();
+        if (!r.ok) throw new Error();
+        reflectStatus(s);
+      } catch {
+        statusFeedback.textContent = 'Erreur';
+        statusFeedback.className = 'status err';
+      }
+    }
+
+    statusApplyBtn.addEventListener('click', applyStatus);
+    // Picking a preset applies immediately (the common gesture); note/duration
+    // need the Appliquer button (or Enter in the note).
+    statusPresetSel.addEventListener('change', applyStatus);
+    statusNoteInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); applyStatus(); }
+    });
+
+    // A change made elsewhere (the Pi's screen gear panel, another device, or an
+    // auto-revert at the deadline) syncs in live.
+    socket.on('status:updated', ({ status: s }) => {
+      if (document.activeElement !== statusPresetSel) statusPresetSel.value = s?.presetId || '';
+      if (document.activeElement !== statusNoteInput) statusNoteInput.value = s?.note || '';
+      reflectStatus(s);
+    });
+    socket.on('status-presets:updated', renderStatusPresets);
 
     // ===== Transport / broker status =====
     const transportLine = document.getElementById('transport-line');
@@ -674,10 +843,11 @@
     async function loadAll() {
       try {
         await loadPeers();
-        const [rR, rS] = await Promise.all([fetch('/replies'), fetch('/shortcuts')]);
-        const [repliesList, shortcutsList] = await Promise.all([rR.json(), rS.json()]);
+        const [rR, rS, rSP] = await Promise.all([fetch('/replies'), fetch('/shortcuts'), fetch('/status-presets')]);
+        const [repliesList, shortcutsList, statusPresetsList] = await Promise.all([rR.json(), rS.json(), rSP.json()]);
         renderReplies(repliesList);
         renderShortcuts(shortcutsList);
+        renderStatusPresets(statusPresetsList);
       } catch {
         status.textContent = 'Impossible de charger';
         status.className = 'status err';
@@ -703,11 +873,20 @@
         }))
         .filter((s) => s.label && s.text); // empty targetOwner = global shortcut
 
+      const statusPresetsPayload = [...statusPresetsCardsEl.querySelectorAll('.card')]
+        .map((card) => ({
+          id: card.dataset.id || undefined,
+          icon: card.querySelector('.icon-input').value.trim(),
+          label: card.querySelector('.label-input').value.trim(),
+          color: card.querySelector('.color-input').value,
+        }))
+        .filter((p) => p.label);
+
       status.textContent = 'Enregistrement…';
       status.className = 'status';
 
       try {
-        const [rR, rS, rP] = await Promise.all([
+        const [rR, rS, rP, rSP] = await Promise.all([
           fetch('/replies', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -723,13 +902,20 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nickname: nicknameInput.value.trim() }),
           }),
+          fetch('/status-presets', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(statusPresetsPayload),
+          }),
         ]);
-        const [savedReplies, savedShortcuts, savedProfile] = await Promise.all([rR.json(), rS.json(), rP.json()]);
+        const [savedReplies, savedShortcuts, savedProfile, savedStatusPresets] = await Promise.all([rR.json(), rS.json(), rP.json(), rSP.json()]);
         if (!rR.ok) throw new Error(savedReplies.error || 'Échec (réponses)');
         if (!rS.ok) throw new Error(savedShortcuts.error || 'Échec (raccourcis)');
         if (!rP.ok) throw new Error(savedProfile.error || 'Échec (surnom)');
+        if (!rSP.ok) throw new Error(savedStatusPresets.error || 'Échec (statuts)');
         renderReplies(savedReplies);
         renderShortcuts(savedShortcuts);
+        renderStatusPresets(savedStatusPresets);
         if (document.activeElement !== nicknameInput) nicknameInput.value = savedProfile.nickname || '';
         status.textContent = 'Enregistré';
         status.className = 'status ok';
@@ -740,7 +926,9 @@
       }
     });
 
-    loadAll();
+    // loadStatus after loadAll so the preset <select> is populated before we set
+    // its value from the saved selection (else the option doesn't exist yet).
+    loadAll().then(loadStatus);
     loadDnd();
     themeCtl.load();
     loadTransport();
