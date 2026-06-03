@@ -42,6 +42,7 @@ app.get('/me', (req, res) => {
     instanceId: INSTANCE_ID,
     nickname: store.getNickname(),
     version: VERSION,
+    status: store.getStatus(),
     transport: transport.health(),
   });
 });

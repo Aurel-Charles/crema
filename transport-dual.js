@@ -42,19 +42,19 @@ export function createDualTransport({ io }) {
   // "hors-ligne" instead of "p2p · direct"). All other events pass through.
   // V7.4 — version flows through here too: stored in the entry, re-emitted on
   // change so the front-end picks up upgrades without waiting for a peer:up
-  // from one of the sub-transports.
-  const sources = new Map(); // instanceId -> { owner, nickname, version, sources: Set<'p2p'|'broker'> }
+  // from one of the sub-transports. V7.7 — status flows through the same way.
+  const sources = new Map(); // instanceId -> { owner, nickname, version, status, sources: Set<'p2p'|'broker'> }
 
   function presenceUp(source, p) {
     if (!p?.instanceId) return;
     let e = sources.get(p.instanceId);
-    if (!e) { e = { owner: p.owner ?? '?', nickname: '', version: '', sources: new Set() }; sources.set(p.instanceId, e); }
+    if (!e) { e = { owner: p.owner ?? '?', nickname: '', version: '', status: null, sources: new Set() }; sources.set(p.instanceId, e); }
     if (p.owner) e.owner = p.owner;
     const wasEmpty = e.sources.size === 0;
-    // Forward when the peer first comes up OR its nickname/version changed
-    // (V7.1 / V7.4 hot updates): peer:up is an idempotent upsert on the
-    // front-end side, so re-emitting is safe and is how nickname edits and
-    // version bumps land.
+    // Forward when the peer first comes up OR its nickname/version/status
+    // changed (V7.1 / V7.4 / V7.7 hot updates): peer:up is an idempotent upsert
+    // on the front-end side, so re-emitting is safe and is how nickname edits,
+    // version bumps and status changes land.
     const nick = p.nickname || '';
     const nickChanged = nick !== e.nickname;
     e.nickname = nick;
@@ -64,9 +64,15 @@ export function createDualTransport({ io }) {
     // good value from the other.
     const verChanged = ver && ver !== e.version;
     if (ver) e.version = ver;
+    // Status, unlike version, *can* legitimately go back to null (cleared /
+    // expired), so a peer:up that carries the `status` key always reflects it.
+    // A peer:up without the key (shouldn't happen post-V7.7) leaves it as-is.
+    const status = 'status' in p ? (p.status ?? null) : e.status;
+    const statusChanged = JSON.stringify(status) !== JSON.stringify(e.status);
+    e.status = status;
     e.sources.add(source);
-    if (wasEmpty || nickChanged || verChanged) {
-      io.emit('peer:up', { instanceId: p.instanceId, owner: e.owner, nickname: e.nickname, version: e.version });
+    if (wasEmpty || nickChanged || verChanged || statusChanged) {
+      io.emit('peer:up', { instanceId: p.instanceId, owner: e.owner, nickname: e.nickname, version: e.version, status: e.status });
     }
   }
 
@@ -178,7 +184,7 @@ export function createDualTransport({ io }) {
       // Derived from the presence aggregator so a fresh client's peers:init
       // matches the net peer:up/peer:down stream exactly.
       return [...sources.entries()].map(([instanceId, e]) => ({
-        instanceId, owner: e.owner, nickname: e.nickname, version: e.version || '',
+        instanceId, owner: e.owner, nickname: e.nickname, version: e.version || '', status: e.status ?? null,
       }));
     },
 

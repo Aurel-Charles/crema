@@ -1,11 +1,12 @@
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import {
   DATA_DIR, REPLIES_FILE, SHORTCUTS_FILE, DND_FILE, IDENTITY_FILE, DEFAULT_TARGET_FILE,
-  TRANSPORT_FILE, THEME_FILE, DEFAULT_REPLIES, OWNER, BROKER_URL,
+  TRANSPORT_FILE, THEME_FILE, STATUS_PRESETS_FILE, STATUS_FILE,
+  DEFAULT_REPLIES, DEFAULT_STATUS_PRESETS, OWNER, BROKER_URL,
 } from './config.js';
 import {
   clampTtl, sanitizeReplies, sanitizeShortcuts, sanitizeNickname, sanitizeTarget,
-  sanitizeBrokerUrl, sanitizeTheme,
+  sanitizeBrokerUrl, sanitizeTheme, sanitizeStatusPresets, resolveStatus,
 } from './sanitize.js';
 import { sysLog } from './logger.js';
 
@@ -191,6 +192,94 @@ export function getTheme() {
   return theme;
 }
 
+// ===== Rich presence (V7.7) =====
+//
+// Two distinct objects, deliberately (the data model treats preset catalogs and
+// live state separately):
+//   - statusPresets : a per-Pi catalog (Sorti / Occupé / …), configured from
+//     the PWA exactly like replies/shortcuts. Local-only — peers never need a
+//     Pi's catalog, only its *resolved* current status.
+//   - status        : the live selection { presetId, note, until }, resolved
+//     against the catalog into { label, icon, color, note?, until? }. That
+//     resolved object is what propagates to peers on top of `owner` (like the
+//     V7.1 nickname). null = no status set → the plain "en ligne" default.
+//
+// Orthogonal to DND: DND silences *our* incoming alerts; status only changes how
+// peers *see* us. They never touch each other.
+
+let statusPresets = [];
+
+async function loadStatusPresets() {
+  try {
+    const raw = await readFile(STATUS_PRESETS_FILE, 'utf8');
+    statusPresets = sanitizeStatusPresets(JSON.parse(raw));
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      statusPresets = [...DEFAULT_STATUS_PRESETS];
+      await persistAtomic(STATUS_PRESETS_FILE, statusPresets);
+      console.log('[status-presets] seeded defaults');
+    } else {
+      console.error('[status-presets] load failed:', err.message);
+      statusPresets = [...DEFAULT_STATUS_PRESETS];
+    }
+  }
+}
+
+export function getStatusPresets() {
+  return statusPresets;
+}
+
+// The raw selection, persisted so a re-resolve survives a catalog edit/restart.
+let statusSelection = { presetId: '', note: '', until: null };
+// The resolved status (or null), recomputed whenever selection or catalog change.
+let status = null;
+// The pending auto-revert timer (cleared/replaced on every change).
+let statusTimer = null;
+// Set by init() so the auto-revert can persist + announce like a manual clear.
+let statusOnRevert = () => {};
+
+function resolveCurrentStatus() {
+  status = resolveStatus(statusPresets, statusSelection);
+}
+
+function clearStatusTimer() {
+  if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+}
+
+// (Re)arm the auto-revert from the resolved status' `until`. At the deadline the
+// status clears itself, persists, and re-announces to peers — same end state as
+// the user picking "Disponible" manually.
+function armStatusTimer() {
+  clearStatusTimer();
+  const until = status?.until;
+  if (!until) return;
+  const delay = until - Date.now();
+  if (delay <= 0) { statusOnRevert('expired'); return; }
+  statusTimer = setTimeout(() => statusOnRevert('expired'), delay);
+}
+
+async function loadStatus() {
+  try {
+    const raw = await readFile(STATUS_FILE, 'utf8');
+    const saved = JSON.parse(raw) ?? {};
+    statusSelection = {
+      presetId: typeof saved.presetId === 'string' ? saved.presetId : '',
+      note: typeof saved.note === 'string' ? saved.note : '',
+      until: Number.isFinite(Number(saved.until)) ? Number(saved.until) : null,
+    };
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('[status] load failed:', err.message);
+    statusSelection = { presetId: '', note: '', until: null };
+  }
+  resolveCurrentStatus();
+}
+
+// The resolved live status (or null). Read by /me, the propagation layer
+// (peers.js TXT + transport announce), and the front-ends.
+export function getStatus() {
+  return status;
+}
+
 // ===== Init =====
 
 export async function init({ app, io, transport }) {
@@ -201,6 +290,8 @@ export async function init({ app, io, transport }) {
   await loadDefaultTarget();
   await loadTransport();
   await loadTheme();
+  await loadStatusPresets();
+  await loadStatus();
 
   app.get('/replies', (req, res) => res.json(replies));
   app.put('/replies', async (req, res) => {
@@ -297,6 +388,76 @@ export async function init({ app, io, transport }) {
     sysLog('profile:update', nickname ? `Surnom défini : « ${nickname} »` : 'Surnom retiré', { owner: OWNER, nickname });
     res.json({ owner: OWNER, nickname });
   });
+
+  // Rich presence (V7.7). Two endpoints mirroring the two objects above.
+
+  // The status presets catalog — configured from the PWA like shortcuts. On a
+  // change we re-resolve the live status (an edited/removed active preset must
+  // not leave a stale resolved object) and re-announce if it actually changed.
+  app.get('/status-presets', (req, res) => res.json(statusPresets));
+  app.put('/status-presets', async (req, res) => {
+    try {
+      statusPresets = sanitizeStatusPresets(req.body);
+      await persistAtomic(STATUS_PRESETS_FILE, statusPresets);
+      io.emit('status-presets:updated', statusPresets);
+      const before = JSON.stringify(status);
+      resolveCurrentStatus();
+      if (JSON.stringify(status) !== before) {
+        armStatusTimer();
+        io.emit('status:updated', { status });
+        transport?.announceProfile?.();
+      }
+      res.json(statusPresets);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // The live status selection. Body: { presetId, note?, until? }. An empty/absent
+  // presetId clears the status (= "Disponible"). Resolved server-side against
+  // the catalog, persisted, broadcast to local front-ends, and announced to
+  // peers over whatever transport(s) are live — the same propagation path as the
+  // nickname. The picker echoes the resolved object back.
+  app.get('/status', (req, res) => res.json({ status, selection: statusSelection }));
+  app.put('/status', async (req, res) => {
+    const presetId = typeof req.body?.presetId === 'string' ? req.body.presetId : '';
+    statusSelection = { presetId, note: req.body?.note, until: req.body?.until };
+    resolveCurrentStatus();
+    // Persist the normalised selection (drops note/until the resolver rejected).
+    statusSelection = {
+      presetId: status?.presetId ?? '',
+      note: status?.note ?? '',
+      until: status?.until ?? null,
+    };
+    try {
+      await persistAtomic(STATUS_FILE, statusSelection);
+    } catch (err) {
+      console.error('[status] persist failed:', err.message);
+    }
+    armStatusTimer();
+    io.emit('status:updated', { status });
+    transport?.announceProfile?.();
+    sysLog('status:update', status ? `Statut : ${status.label}${status.note ? ` — ${status.note}` : ''}` : 'Statut effacé (disponible)', { status });
+    res.json({ status, selection: statusSelection });
+  });
+
+  // Auto-revert: when the `until` deadline fires, clear the status the same way
+  // a manual "Disponible" does (persist + announce + tell the front-ends).
+  statusOnRevert = async (reason) => {
+    clearStatusTimer();
+    statusSelection = { presetId: '', note: '', until: null };
+    status = null;
+    try {
+      await persistAtomic(STATUS_FILE, statusSelection);
+    } catch (err) {
+      console.error('[status] revert persist failed:', err.message);
+    }
+    io.emit('status:updated', { status });
+    transport?.announceProfile?.();
+    sysLog('status:revert', 'Statut expiré → disponible', { reason });
+  };
+  // Arm now in case a saved status was already past its deadline at boot.
+  armStatusTimer();
 
   // Broker URL (V7.3). The page reads GET to render the field + the live status,
   // and PUTs to set/clear the override. `source` tells the UI where the
