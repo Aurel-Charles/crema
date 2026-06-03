@@ -43,12 +43,20 @@ export function createDualTransport({ io }) {
   // V7.4 — version flows through here too: stored in the entry, re-emitted on
   // change so the front-end picks up upgrades without waiting for a peer:up
   // from one of the sub-transports. V7.7 — status flows through the same way.
-  const sources = new Map(); // instanceId -> { owner, nickname, version, status, sources: Set<'p2p'|'broker'> }
+  const sources = new Map(); // instanceId -> { owner, nickname, version, status, statuses: Map<source,status>, sources: Set<'p2p'|'broker'> }
+
+  // Effective status across the live paths: the first non-null. A null from one
+  // path (e.g. a pre-V7.7 broker that strips the field, or a path that hasn't
+  // caught the announce yet) must not erase a real status carried by the other.
+  function effStatus(e) {
+    for (const s of e.statuses.values()) if (s) return s;
+    return null;
+  }
 
   function presenceUp(source, p) {
     if (!p?.instanceId) return;
     let e = sources.get(p.instanceId);
-    if (!e) { e = { owner: p.owner ?? '?', nickname: '', version: '', status: null, sources: new Set() }; sources.set(p.instanceId, e); }
+    if (!e) { e = { owner: p.owner ?? '?', nickname: '', version: '', status: null, statuses: new Map(), sources: new Set() }; sources.set(p.instanceId, e); }
     if (p.owner) e.owner = p.owner;
     const wasEmpty = e.sources.size === 0;
     // Forward when the peer first comes up OR its nickname/version/status
@@ -64,10 +72,11 @@ export function createDualTransport({ io }) {
     // good value from the other.
     const verChanged = ver && ver !== e.version;
     if (ver) e.version = ver;
-    // Status, unlike version, *can* legitimately go back to null (cleared /
-    // expired), so a peer:up that carries the `status` key always reflects it.
-    // A peer:up without the key (shouldn't happen post-V7.7) leaves it as-is.
-    const status = 'status' in p ? (p.status ?? null) : e.status;
+    // Status is resolved per-source (see effStatus): record this path's view,
+    // then recompute the effective so one path's null can't clobber the other's
+    // real status. A peer:up without the key leaves this path's view untouched.
+    if ('status' in p) e.statuses.set(source, p.status ?? null);
+    const status = effStatus(e);
     const statusChanged = JSON.stringify(status) !== JSON.stringify(e.status);
     e.status = status;
     e.sources.add(source);
@@ -82,7 +91,15 @@ export function createDualTransport({ io }) {
     const e = sources.get(id);
     if (!e) return;
     e.sources.delete(source);
-    if (e.sources.size === 0) { sources.delete(id); io.emit('peer:down', { instanceId: id }); }
+    e.statuses.delete(source);
+    if (e.sources.size === 0) { sources.delete(id); io.emit('peer:down', { instanceId: id }); return; }
+    // The dropped path may have held the only non-null status — recompute, and
+    // re-emit if the effective status changed (peer is still up via the other).
+    const status = effStatus(e);
+    if (JSON.stringify(status) !== JSON.stringify(e.status)) {
+      e.status = status;
+      io.emit('peer:up', { instanceId: id, owner: e.owner, nickname: e.nickname, version: e.version, status: e.status });
+    }
   }
 
   // A façade over the real io that reroutes only presence events through the
